@@ -137,7 +137,7 @@ To compile **DotNetDataCollectorEx** from source, you will need:
    - Choose the desired **publish profile** (`win-x64`, `win-x86`, etc.).
    - Click **Publish**.
 
-5. **Find the compiled executable** in the respective output directory ([see the table below](#.-output-directories))
+5. **Find the compiled executable** in the respective output directory ([see the table below](#-output-directories))
 
 ---
 

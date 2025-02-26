@@ -80,6 +80,7 @@ For maximum flexibility, it is recommended to use **DotNetDataCollectorEx** in *
 If you want to debug **.NET 8+** applications, it is **recommended** to call `ReplaceLegacyDataCollector` to replace the legacy collector, as the legacy version does not support **.NET 8+**. This is important because other **Cheat Engine** functionality that relies on **DotNetDataCollector** will only work with **.NET 8+** if you use the new version. These include but are not limited to:
 - The `.net Info` Window
 - **Cheat Engine's** Symbol Handler
+- **Cheat Engine's** Dissect data/structures
 - `dotnetinterface.lua` used for example for Jitting methods.
 
 ---
@@ -93,7 +94,7 @@ If you want to debug **.NET 8+** applications, it is **recommended** to call `Re
 - **DotNetDataCollectorEx**:
   - Supports **.NET Framework 4.5+** and is the only version that supports **.NET 8+**.
   - Provides, in some cases, more detailed memory analysis and additional features compared to the legacy version.
-  - 
+
 ### Known Limitations:
 - Certain operations may incur slightly higher performance overhead compared to the legacy collector.
 - **Parameter Names** returned by `getMethodParameters` are not the **actual** name of the parameter but the name of the type. This is because [ClrMD](https://github.com/microsoft/clrmd) does not expose those.

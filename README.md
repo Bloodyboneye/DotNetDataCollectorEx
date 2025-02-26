@@ -31,7 +31,7 @@ Now, Cheat Engine will use **DotNetDataCollectorEx**, but will fall back to the 
 ### **2. Extension Mode (Recommended)**
 
 1. Keep the existing **DotNetDataCollector.exe's** in place.
-2. Copy `DotNetDataCollectorEx32.exe` and `DotNetDataCollectorEx32.exe` into one of the folders defined in the lua script inside the `processlocations` table.
+2. Copy `DotNetDataCollectorEx32.exe` and `DotNetDataCollectorEx64.exe` into one of the folders defined in the lua script inside the `processlocations` table.
    - Default Locations are:
    - 1. **Cheat Engine** installation folder
      2. `autorun` folder

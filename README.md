@@ -22,7 +22,7 @@ There are two installation methods for **DotNetDataCollectorEx**:
 1. Locate your **Cheat Engine** installation folder.
 2. Rename the existing **DotNetDataCollector32.exe** and **DotNetDataCollector64.exe** to **LegacyDotNetDataCollector32.exe** **LegacyDotNetDataCollector64.exe** respectively.
   - **DotNetDataCollectorEx** will automatically run `LegacyDotNetDataCollector.exe` for older .NET versions or Versions for which it can't find the DAC.
-4. Copy `DotNetDataCollectorEx32.exe` and `DotNetDataCollectorEx64.exe` into **Cheat Engine's** installation folder.
+4. Copy `DotNetDataCollectorEx32.exe` and `DotNetDataCollectorEx64.exe` into **Cheat Engine's** installation folder and rename them to `DotNetDataCollector32.exe` and `DotNetDataCollectorEx64.exe` respectively.
 5. (OPTIONAL) Copy `DotNetDataCollectorEx.lua` into the `autorun` folder.
 6. Restart **Cheat Engine**.
 

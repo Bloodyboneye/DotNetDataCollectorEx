@@ -18,7 +18,7 @@ local collectorEx = getDotNetDataCollectorEx()
 **Description**
 Does the same as **Cheat Engine's** `DotNetDataCollector` `enumDomains()`
 
-**Paramters:**
+**Parameters:**
 - None
 
 **Returns:**
@@ -38,7 +38,7 @@ end
 **Description**
 Does the same as **Cheat Engine's** `DotNetDataCollector` `enumModuleList(domainHandle)`
 
-**Paramters:**
+**Parameters:**
 - `domainHandle` (number): The **DomainHandle** for which to list the modules for
 
 **Returns:**
@@ -59,7 +59,7 @@ end
 **Description**
 Does the same as **Cheat Engine's** `DotNetDataCollector` `enumTypeDefs(ModuleHandle)`
 
-**Paramters:**
+**Parameters:**
 - `ModuleHandle` (number): The **ModuleHandle** for which to list the types for
 
 **Returns:**
@@ -81,7 +81,7 @@ end
 **Description**
 Does the same as **Cheat Engine's** `DotNetDataCollector` `getTypeDefMethods(ModuleHandle, TypeDefToken)`
 
-**Paramters:**
+**Parameters:**
 - `ModuleHandle` (number): The **ModuleHandle** in which the type resides
 - `TypeDefToken` (number): The **Token** of the type for which to get the methods for
 
@@ -107,7 +107,7 @@ end
 **Description**
 Does the same as **Cheat Engine's** `DotNetDataCollector` `getAddressData(address)`
 
-**Paramters:**
+**Parameters:**
 - `address` (number): The **Address** for which to get the data for
 
 **Returns:**
@@ -138,7 +138,7 @@ print("Class Name:" .. object.ClassName)
 **Description**
 Does the same as **Cheat Engine's** `DotNetDataCollector` `enumAllObjects()`
 
-**Paramters:**
+**Parameters:**
 - None
 
 **Returns:**
@@ -163,7 +163,7 @@ end
 **Description**
 Does the same as **Cheat Engine's** `DotNetDataCollector` `getTypeDefData(ModuleHandle, TypeDefToken)`
 
-**Paramters:**
+**Parameters:**
 - `ModuleHandle` (number): The **ModuleHandle** in which the type resides
 - `TypeDefToken` (number): The **Token** of the type for which to get the data for
 
@@ -194,7 +194,7 @@ print("Class Name:" .. typeinfo.ClassName)
 **Description**
 Does the same as **Cheat Engine's** `DotNetDataCollector` `legacy_getMethodParameters(ModuleHandle, MethodDefToken)`
 
-**Paramters:**
+**Parameters:**
 - `ModuleHandle` (number): The **ModuleHandle** in which the method resides
 - `MethodDefToken` (number): The **Token** of the method for which to get the data for
 
@@ -216,7 +216,7 @@ end
 **Description**
 Does the same as **Cheat Engine's** `DotNetDataCollector` `getTypeDefParent(ModuleHandle, TypeDefToken)`
 
-**Paramters:**
+**Parameters:**
 - `ModuleHandle` (number): The **ModuleHandle** in which the type resides
 - `TypeDefToken` (number): The **Token** of the type for which to get the parent type for
 
@@ -235,7 +235,7 @@ print("Parent Token:" .. typeinfo.TypedefToken)
 **Description**
 Does the same as **Cheat Engine's** `DotNetDataCollector` `enumAllObjectsOfType(ModuleHandle, TypeDefToken)`
 
-**Paramters:**
+**Parameters:**
 - `ModuleHandle` (number): The **ModuleHandle** in which the type resides
 - `TypeDefToken` (number): The **Token** of the type for which to get all the allocated objects for
 
@@ -259,7 +259,7 @@ All of the below functions return nil if the **DotNetDataCollectorEx** is not ru
 **Description**
 Returns information about the **DataCollectorEx**
 
-**Paramters:**
+**Parameters:**
 - None
 
 **Returns:**
@@ -280,7 +280,7 @@ print("Pipe Name is " .. info.PipeName)
 **Description**
 Returns a table that contains all of the loaded App Domains
 
-**Paramters:**
+**Parameters:**
 - None
 
 **Returns:**
@@ -301,7 +301,7 @@ end
 **Description**
 Returns a table that contains all of the loaded modules
 
-**Paramters:**
+**Parameters:**
 - (OPTIONAL) `hDomain` (number): The handle/address of the domain for which to get the modules for, if this is nil or 0 then it will get all loaded modules in all appdomains
 
 **Returns:**
@@ -330,7 +330,7 @@ end
 **Description**
 Returns a table that contains all of the loaded modules
 
-**Paramters:**
+**Parameters:**
 - (OPTIONAL) `hModule` (number): The handle/address of the Module for which to get the types for, if this is nil or 0 then it will get all loaded types in all modules
 
 **Returns:**
@@ -359,7 +359,7 @@ end
 **Description**
 Returns a table that contains all of the methods inside the type
 
-**Paramters:**
+**Parameters:**
 - `hType` (number): The MethodTable/TypeHandle of the Type for which to get the methods for
 
 **Returns:**
@@ -389,7 +389,7 @@ end
 **Description**
 Returns a table containing information about the parent type
 
-**Paramters:**
+**Parameters:**
 - `hType` (number): The MethodTable/TypeHandle of the Type for which to get the parent for
 
 **Returns:**
@@ -408,7 +408,7 @@ print("Parent Type Name is " .. parentType.Name)
 **Description**
 Returns a table that contains information about the Object if the address is inside an Object
 
-**Paramters:**
+**Parameters:**
 - `address` (number): The address to get information about. Must be inside an Object
 
 **Returns:**
@@ -463,7 +463,7 @@ print("Start Address is " .. addrData.StartAddress)
 **Description**
 Returns a table that contains information about all of the allocated Objects
 
-**Paramters:**
+**Parameters:**
 - None
 
 **Returns:**
@@ -520,7 +520,7 @@ end
 **Description**
 Returns a table that contains information about the type
 
-**Paramters:**
+**Parameters:**
 - `hType` (number): The MethodTable/TypeHandle of the type
 
 **Returns:**
@@ -572,8 +572,8 @@ print("Type Name is " .. typeData.Name)
 **Description**
 Returns a table containing information about the methods parameters
 
-**Paramters:**
-- `hMethod` (number): The MethodDesc of the Method for which to get the method paramters for
+**Parameters:**
+- `hMethod` (number): The MethodDesc of the Method for which to get the method Parameters for
 
 **Returns:**
 - A table containing information about all of parameters inside the method
@@ -595,7 +595,7 @@ end
 **Description**
 Returns a table containing information about all of the allocated objects of the type
 
-**Paramters:**
+**Parameters:**
 - `hType` (number): The MethodTable/TypeHandle of the Type for which to get the allocated objects for
 
 **Returns:**
@@ -615,7 +615,7 @@ end
 **Description**
 Returns a table that contains information about the type | Obsolete as it does the same as `GetTypeDefData(hType)`
 
-**Paramters:**
+**Parameters:**
 - `hType` (number): The MethodTable/TypeHandle of the type
 
 **Returns:**
@@ -667,7 +667,7 @@ print("Type Name is " .. typeData.Name)
 **Description**
 Returns a table that contains information about the Base Class Module ex: mscorlib.dll
 
-**Paramters:**
+**Parameters:**
 - None
 
 **Returns:**
@@ -694,7 +694,7 @@ print("Module Name is " .. basemodule.Name)
 **Description**
 Returns a table that contains information about the AppDomain
 
-**Paramters:**
+**Parameters:**
 - `hDomain` (number): The address of the AppDomain
 
 **Returns:**
@@ -716,7 +716,7 @@ print("AppDomain Name is " .. appdomainInfo.Name)
 **Description**
 Returns a table that contains all of the allocated GC handles
 
-**Paramters:**
+**Parameters:**
 - None
 
 **Returns:**
@@ -749,7 +749,7 @@ end
 **Description**
 Returns a table that contains information about the method
 
-**Paramters:**
+**Parameters:**
 - `hMethod` (number): The MethodDesc of the method to get the information for
 
 **Returns:**
@@ -778,7 +778,7 @@ print("Method Name is " .. methodInfo.Name)
 Returns a table that contains information about the method that the ip(Instruction Pointer) is inside of.
 This can be anywhere inside a method in memory. But must be inside a method and not in some other part of memory
 
-**Paramters:**
+**Parameters:**
 - `ip` (number): The ip(Instruction Pointer) that is inside the methods compiled body
 
 **Returns:**
@@ -809,7 +809,7 @@ Valid values for `specialType` are: 1 -> HeapFree Type, 2 -> Exception Type
 If special type is not any of those it will check for the `elementType`
 For valid **Element Types** see the `ClrElementType` Table at the Top of the `DotNetDataCollector.lua` file
 
-**Paramters:**
+**Parameters:**
 - (OPTIONAL) `elementType` (number): The `Element Type` of the type to get
 - (OPTIONAL) `specialType` (number): The `"special Type"` to get see the description for more info
 
@@ -862,7 +862,7 @@ print("Type Name is " .. typeData.Name)
 **Description**
 Returns a table that contains information about the clr
 
-**Paramters:**
+**Parameters:**
 - None
 
 **Returns:**
@@ -885,7 +885,7 @@ print("CLR Version is " .. clrInfo.Version)
 **Description**
 Returns a table that contains all of the managed threads
 
-**Paramters:**
+**Parameters:**
 - None
 
 **Returns:**
@@ -916,7 +916,7 @@ end
 **Description**
 Returns a table that contains all of stack frames of the thread
 
-**Paramters:**
+**Parameters:**
 - `threadid` (number): The **Managed** or **OS** thread id
 
 **Returns:**
@@ -945,7 +945,7 @@ end
 **Description**
 Returns a table that contains information about the managed thread
 
-**Paramters:**
+**Parameters:**
 - `threadid` (number): The **Managed** or **OS** thread id
 
 **Returns:**
@@ -974,7 +974,7 @@ print("Thread Managed Id: " .. thread.ManagedThreadId)
 **Description**
 Flushes the DAC Cache - Might want to call this if new objects have been allocated and you want to search for them.
 
-**Paramters:**
+**Parameters:**
 - None
 
 **Returns:**

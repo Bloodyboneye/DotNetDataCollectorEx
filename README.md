@@ -1,6 +1,6 @@
 # DotNetDataCollectorEx
 
-**DotNetDataCollectorEx** is a extension/replacement to Cheat Engine's **DotNetDataCollector**, designed to work with **.NET Framework 4.5+** and **.NET Core 3+** / **.NET 5+**. It provides some additional features and in some cases more information. It also supports **.NET 8+** which Cheat Engines's **DotNetDataCollector** does not.
+**DotNetDataCollectorEx** is an extension/replacement to Cheat Engine's **DotNetDataCollector**, designed to work with **.NET Framework 4.5+** and **.NET Core 3+** / **.NET 5+**. It provides some additional features and in some cases more information. It also supports **.NET 8+** which Cheat Engines's **DotNetDataCollector** does not.
 
 **DotNetDataCollectorEx** uses [ClrMD](https://github.com/microsoft/clrmd) to collect information whereas Cheat Engine's **DotNetDataCollector** uses the **.NET Unmanaged API**
 

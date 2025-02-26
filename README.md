@@ -7,7 +7,7 @@
 ## Features
 
 - Support for **.NET Framework 4.5+** and **.NET Core 3+** / **.NET 5+**.
-- Provides in some cases more detailed memory analysis and additional functions compared to the legacy **DotNetDataCollector**.
+- Provides, in some cases, more detailed memory analysis and additional functions compared to the legacy **DotNetDataCollector**.
 - Works in both **Replacement Mode** and **Extension Mode**.
 - Can be used dynamically via Lua to replace the legacy **DotNetDataCollector**.
 
@@ -92,7 +92,7 @@ If you want to debug **.NET 8+** applications, it is **recommended** to call `Re
 
 - **DotNetDataCollectorEx**:
   - Supports **.NET Framework 4.5+** and is the only version that supports **.NET 8+**.
-  - Provides in some cases more detailed memory analysis and additional features compared to the legacy version.
+  - Provides, in some cases, more detailed memory analysis and additional features compared to the legacy version.
   - 
 ### Known Limitations:
 - Certain operations may incur slightly higher performance overhead compared to the legacy collector.

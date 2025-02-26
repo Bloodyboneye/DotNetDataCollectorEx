@@ -1,18 +1,8 @@
 ﻿using Microsoft.Diagnostics.Runtime;
-using Microsoft.Diagnostics.Runtime.Interfaces;
-using System;
-using System.Collections.Generic;
 using System.Diagnostics;
 using System.IO.Pipes;
-using System.Linq;
-using System.Net.Security;
-using System.Runtime.CompilerServices;
 using System.Runtime.InteropServices;
-using System.Runtime.Serialization.Formatters;
-using System.Security.AccessControl;
 using System.Text;
-using System.Threading.Tasks;
-using System.Xml;
 
 namespace DotNetDataCollectorEx
 {
@@ -1739,7 +1729,8 @@ namespace DotNetDataCollectorEx
         ~PipeServer()
         {
             pipe.Dispose();
-            inspector.Dispose();
+            if (!_isExPipe)
+                inspector.Dispose();
         }
     }
 }

@@ -100,7 +100,7 @@ end
 
 local function dotnetex_I_getRunningDotNetInfoEx()
     local r = {}
-    local od = DotNetDataCollectorEx.GetAddressData(0xBDBDBDBDBDBDBD01)
+    local od = DotNetDataCollectorEx.legacy_getAddressData(0xBDBDBDBDBDBDBD01)
     if (od) then
         local c = od.StartAddress
         r.RunningState = (c >> 32) & 0xFFFFFFFF
@@ -212,6 +212,7 @@ local function dotnetex_I_L_readType(o)
             f.Offset = dotnetpipeex.readDword()
             f.FieldType = dotnetpipeex.readDword()
             local attribs = dotnetpipeex.readDword()
+            f.Attribs = attribs
             f.IsStatic = (attribs & 0x10 ~= 0)
             f.Name = dotnetex_readString()
             f.FieldTypeClassName = dotnetex_readString()
@@ -404,7 +405,7 @@ local function dotnetex_initPipe(timeout, pipeInfo)
         -- Try to reconnect with pipe
         pipename = pipeInfo.PipeName
     end
-    local targettk = getTickCount() + timeout 
+    local targettk = getTickCount() + timeout
     while (targettk > getTickCount()) do
         dotnetpipeex = connectToPipe(pipename, timeout)
         if (dotnetpipeex) then break end
@@ -512,7 +513,7 @@ function DotNetDataCollectorEx.legacy_enumTypeDefs(ModuleHandle)
     return result
 end
 
-function DotNetDataCollectorEx.legacy_getTypeDefmethods(ModuleHandle, TypeDefToken)
+function DotNetDataCollectorEx.legacy_getTypeDefMethods(ModuleHandle, TypeDefToken)
     if (dotnetpipeex.isLegacy) then
         return getDotNetDataCollector().getTypeDefMethods(ModuleHandle, TypeDefToken)
     end
@@ -1164,6 +1165,60 @@ function DotNetDataCollectorEx.FlushDACCache() -- Flushes the DAC Cache
     dotnetpipeex.unlock()
 end
 
+function DotNetDataCollectorEx.ReplaceLegacyDataCollector(restore) -- Will replace the getDotNetDataCollector() function with a new one - if restore is set then it will restore the function instead
+    if (restore) then
+        if (DotNetDataCollectorEx.IsLegacyOverwritten) then
+            getDotNetDataCollector = DotNetDataCollectorEx.legacyDataCollectorFunction
+            DotNetDataCollectorEx.IsLegacyOverwritten = false
+            return true
+        end
+        return false
+    end
+    if (DotNetDataCollectorEx.IsLegacyOverwritten) then
+        return true
+    end
+    if (not dotnetpipeex.AttachedEx) then
+        return false
+    end
+    DotNetDataCollectorEx.IsLegacyOverwritten = true
+    DotNetDataCollectorEx.legacyDataCollectorFunction = getDotNetDataCollector
+    local l_datacollector = {}
+    l_datacollector.__index = l_datacollector
+    l_datacollector.EnumDomains = DotNetDataCollectorEx.legacy_enumDomains
+    l_datacollector.FieldAddress = function() return 0 end
+    l_datacollector.getClassName = function() return "TDotNetPipe" end
+    l_datacollector.MethodAddress = function() return 0 end
+    l_datacollector.GetTypeDefData = DotNetDataCollectorEx.legacy_getTypeDefData
+    l_datacollector.EnumAllObjectsOfType = DotNetDataCollectorEx.legacy_enumAllObjectsOfType
+    l_datacollector.GetTypeDefParent = DotNetDataCollectorEx.legacy_getTypeDefParent
+    l_datacollector.enumAllObjects = DotNetDataCollectorEx.legacy_enumAllObjects
+    l_datacollector.ClassName = "TDotNetPipe"
+    l_datacollector.enumDomains = DotNetDataCollectorEx.legacy_enumDomains
+    l_datacollector.fieldAddress = l_datacollector.FieldAddress
+    l_datacollector.GetAddressData = DotNetDataCollectorEx.legacy_getAddressData
+    l_datacollector.GetClassName = l_datacollector.getClassName
+    l_datacollector.enumModuleList = DotNetDataCollectorEx.legacy_enumModuleList
+    l_datacollector.EnumTypeDefs = DotNetDataCollectorEx.legacy_enumTypeDefs
+    l_datacollector.getTypeDefData = DotNetDataCollectorEx.legacy_getTypeDefData
+    l_datacollector.enumAllObjectsOfType = DotNetDataCollectorEx.legacy_enumAllObjectsOfType
+    l_datacollector.getAddressData = DotNetDataCollectorEx.legacy_getAddressData
+    l_datacollector.GetMethodParameters = DotNetDataCollectorEx.legacy_getMethodParameters
+    l_datacollector.getMethodParameters = DotNetDataCollectorEx.legacy_getMethodParameters
+    l_datacollector.getTypeDefParent = DotNetDataCollectorEx.legacy_getTypeDefParent
+    l_datacollector.EnumAllObjects = DotNetDataCollectorEx.legacy_enumAllObjects
+    l_datacollector.getTypeDefMethods = DotNetDataCollectorEx.legacy_getTypeDefMethods
+    l_datacollector.GetTypeDefMethods = DotNetDataCollectorEx.legacy_getTypeDefMethods
+    l_datacollector.methodAddress = l_datacollector.MethodAddress
+    l_datacollector.enumTypeDefs = DotNetDataCollectorEx.legacy_enumTypeDefs
+    l_datacollector.className = "TDotNetPipe"
+    l_datacollector.EnumModuleList = DotNetDataCollectorEx.legacy_enumModuleList
+    l_datacollector.MethodName = function () end
+    l_datacollector.methodName = l_datacollector.MethodName
+    l_datacollector.Attached = true
+    getDotNetDataCollector = function () return l_datacollector end
+    return true
+end
+
 local function LaunchDotNetDataCollectorEx()
     local pipeInfo = dotnetex_I_getRunningDotNetInfo()
     if (not pipeInfo) then
@@ -1184,7 +1239,7 @@ end
 
 function getDotNetDataCollectorEx()
     if (dotnetpipeex == nil or tonumber(dotnetpipeex.processid) ~= getOpenedProcessID()) then
-        print("Launching DotNetDataCollectorEx")
+        --print("Launching DotNetDataCollectorEx")
 
         if (not LaunchDotNetDataCollectorEx()) then
             print("Failed to launch DotNetDataCollectorEx")

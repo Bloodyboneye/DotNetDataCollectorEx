@@ -546,6 +546,7 @@ function DotNetDataCollectorEx.legacy_getTypeDefMethods(ModuleHandle, TypeDefTok
 end
 
 function DotNetDataCollectorEx.legacy_getAddressData(address)
+    if (not dotnetpipeex) then return nil end
     if (dotnetpipeex.isLegacy) then
         return getDotNetDataCollector().legacy_getAddressData(address)
     end

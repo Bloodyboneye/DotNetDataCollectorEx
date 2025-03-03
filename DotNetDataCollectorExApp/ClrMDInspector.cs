@@ -1,6 +1,7 @@
 ﻿using Microsoft.Diagnostics.Runtime;
 using System.Diagnostics;
 using System.Linq;
+using System.Runtime.InteropServices;
 
 namespace DotNetDataCollectorEx
 {
@@ -352,6 +353,42 @@ namespace DotNetDataCollectorEx
         {
             EnsureClrRuntimeInitializedOrThrow();
             return _clrRuntime!.Threads;
+        }
+
+        public string? DumpModule(ClrModule module, string outputFile)
+        {
+            EnsureClrRuntimeInitializedOrThrow();
+            if (module.IsDynamic) 
+                return "Module can't be dynamic!";
+            IntPtr hProcess = IntPtr.Zero;
+            try
+            {
+                hProcess = NativeMethods.OpenProcess(NativeMethods.PROCESS_VM_READ | NativeMethods.PROCESS_QUERY_INFORMATION, false, _processId);
+                if (hProcess == IntPtr.Zero)
+                    return "Failed to open process";
+
+                if (NativeMethods.VirtualQueryEx(hProcess, (nint)module.ImageBase, out NativeMethods.MEMORY_BASIC_INFORMATION mbi, (uint)Marshal.SizeOf<NativeMethods.MEMORY_BASIC_INFORMATION>()) == 0)
+                    return "Failed to query Memory!";
+
+                byte[] buffer = new byte[module.Size];
+
+                ulong readableSize = Math.Min(module.Size, (ulong)mbi.RegionSize);
+
+                if (!NativeMethods.ReadProcessMemory(hProcess, (nint)module.ImageBase, buffer, (int)readableSize, out IntPtr bytesRead) || bytesRead == 0)
+                    return "Failed to read memory";
+
+                File.WriteAllBytes(outputFile, buffer);
+                return null;
+            }
+            catch (Exception ex)
+            {
+                return ex.Message;
+            }
+            finally
+            {
+                if (hProcess != IntPtr.Zero)
+                    NativeMethods.CloseHandle(hProcess);
+            }
         }
 
         //public void Test()

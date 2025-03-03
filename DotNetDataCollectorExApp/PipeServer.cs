@@ -10,7 +10,7 @@ namespace DotNetDataCollectorEx
     {
         private const ushort PipeMajorVersion = 1; // Newer versions mean possibly breaking changes.
 
-        private const ushort PipeMinorVersion = 0; // Newer versions might be new functions for example, but no breaking changes to older Versions.
+        private const ushort PipeMinorVersion = 1; // Newer versions might be new functions for example, but no breaking changes to older Versions.
 
         private const uint PipeVersion = (uint)PipeMajorVersion << 16 | PipeMinorVersion;
 
@@ -83,6 +83,7 @@ namespace DotNetDataCollectorEx
             CMD_TRACESTACK = 42,
             CMD_GETTHREAD = 43,
             CMD_FLUSHDACCACHE = 44,
+            CMD_DUMPMODULE = 45,
         }
 
         [Flags]
@@ -1503,6 +1504,27 @@ namespace DotNetDataCollectorEx
             inspector.FlushDACCache();
         }
 
+        private void DumpModule()
+        {
+            ulong hModule = ReadQword();
+            string filePath = ReadUTF16String();
+            if (inspector.ClrRuntime == null)
+            {
+                WriteUTF16String("No ClrRuntime!");
+                return;
+            }
+
+            ClrModule? module = inspector.EnumerateModules().FirstOrDefault(m => m.Address == hModule);
+
+            if (module == null)
+            {
+                WriteUTF16String("Failed to find module!");
+                return;
+            }
+            string? error = inspector.DumpModule(module, filePath);
+            WriteUTF16String(error ?? string.Empty);
+        }
+
         #endregion
 
         private void RunExLoopStub()
@@ -1718,6 +1740,9 @@ namespace DotNetDataCollectorEx
                         break;
                     case (byte)Commands.CMD_FLUSHDACCACHE:
                         FlushDACCache();
+                        break;
+                    case (byte)Commands.CMD_DUMPMODULE:
+                        DumpModule();
                         break;
                     default:
                         Logger.LogWarning($"Invalid Command send over pipe: '{command}'");

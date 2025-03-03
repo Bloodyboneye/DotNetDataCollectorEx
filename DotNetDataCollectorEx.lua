@@ -45,6 +45,7 @@ DotNetDataCollectorExCommands = {
     CMD_TRACESTACK = 42,
     CMD_GETTHREAD = 43,
     CMD_FLUSHDACCACHE = 44,
+    CMD_DUMPMODULE = 45,
 }
 
 ClrElementType = {
@@ -96,6 +97,12 @@ local function dotnetex_readString()
     local stringsize = dotnetpipeex.readDword()
     local strbt = dotnetpipeex.readBytes(stringsize)
     return byteTableToWideString(strbt)
+end
+
+local function dotnetex_writeString(str)
+    local strbt = wideStringToByteTable(str)
+    dotnetpipeex.writeDword(#strbt)
+    dotnetpipeex.writeBytes(strbt)
 end
 
 local function dotnetex_I_getRunningDotNetInfoEx()
@@ -546,6 +553,7 @@ function DotNetDataCollectorEx.legacy_getTypeDefMethods(ModuleHandle, TypeDefTok
 end
 
 function DotNetDataCollectorEx.legacy_getAddressData(address)
+    if (not dotnetpipeex) then return nil end
     if (dotnetpipeex.isLegacy) then
         return getDotNetDataCollector().legacy_getAddressData(address)
     end
@@ -1163,6 +1171,30 @@ function DotNetDataCollectorEx.FlushDACCache() -- Flushes the DAC Cache
     dotnetpipeex.lock()
     dotnetpipeex.writeByte(commands.CMD_FLUSHDACCACHE)
     dotnetpipeex.unlock()
+end
+
+function DotNetDataCollectorEx.DumpModule(hModule, outputFilePath)
+    if (not dotnetpipeex.AttachedEx) then return "No DotNetDataCollectorEx running" end
+    
+    dotnetpipeex.lock()
+    dotnetpipeex.writeByte(commands.CMD_DUMPMODULE)
+    dotnetpipeex.writeQword(hModule)
+    dotnetex_writeString(outputFilePath)
+
+    local err = dotnetex_readString()
+    local o = #err == 0 and outputFilePath or nil
+
+    dotnetpipeex.unlock()
+    return err,o
+end
+
+function DotNetDataCollectorEx.DumpModuleEx(module, outputPath)
+    if (not dotnetpipeex.AttachedEx) then return "No DotNetDataCollectorEx running" end
+    if (type(outputPath) ~= "string") then outputPath = getTempFolder() end
+    
+    outputPath = outputPath:match("\\$") and outputPath or outputPath .. "\\"
+    local fileName = "DUMP_" .. (module.Name ~= "" and extractFileName(module.Name) or ("UNKNOWNNAME_" .. module.hModule))
+    return DotNetDataCollectorEx.DumpModule(module.hModule, outputPath .. fileName)
 end
 
 function DotNetDataCollectorEx.ReplaceLegacyDataCollector(restore) -- Will replace the getDotNetDataCollector() function with a new one - if restore is set then it will restore the function instead

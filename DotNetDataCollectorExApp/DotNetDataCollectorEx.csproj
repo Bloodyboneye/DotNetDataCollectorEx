@@ -9,6 +9,7 @@
     <StartupObject></StartupObject>
     <OutputType>Exe</OutputType>
     <PublishAot>False</PublishAot>
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
   </PropertyGroup>
 
   <ItemGroup>

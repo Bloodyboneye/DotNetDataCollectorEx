@@ -6,9 +6,32 @@ namespace DotNetDataCollectorEx
 {
     internal static class PipeHelper
     {
-        public static void WriteByte(PipeStream pipe, byte v)
+        private static bool SafeWrite(PipeStream pipe, byte[] v)
         {
-            pipe.WriteByte(v);
+            try
+            {
+                pipe.Write(v);
+                return true;
+            }
+            catch (Exception)
+            {
+                Logger.LogWarning("Pipe exception");
+                return false;
+            }
+        }
+
+        public static bool WriteByte(PipeStream pipe, byte v)
+        {
+            try
+            {
+                pipe.WriteByte(v);
+                return true;
+            }
+            catch (Exception)
+            {
+                Logger.LogWarning("Pipe exception");
+                return false;
+            }
         }
 
         public static byte ReadByte(PipeStream pipe)
@@ -19,9 +42,9 @@ namespace DotNetDataCollectorEx
             return array[0];
         }
 
-        public static void WriteWord(PipeStream pipe, ushort v)
+        public static bool WriteWord(PipeStream pipe, ushort v)
         {
-            pipe.Write(BitConverter.GetBytes(v), 0, 2);
+            return SafeWrite(pipe, BitConverter.GetBytes(v));
         }
 
         public static ushort ReadWord(PipeStream pipe)
@@ -31,9 +54,9 @@ namespace DotNetDataCollectorEx
             return BitConverter.ToUInt16(array, 0);
         }
 
-        public static void WriteDword(PipeStream pipe, uint v)
+        public static bool WriteDword(PipeStream pipe, uint v)
         {
-            pipe.Write(BitConverter.GetBytes(v), 0, 4);
+            return SafeWrite(pipe, BitConverter.GetBytes(v));
         }
 
         public static uint ReadDword(PipeStream pipe)
@@ -43,9 +66,9 @@ namespace DotNetDataCollectorEx
             return BitConverter.ToUInt32(array, 0);
         }
 
-        public static void WriteQword(PipeStream pipe, ulong v)
+        public static bool WriteQword(PipeStream pipe, ulong v)
         {
-            pipe.Write(BitConverter.GetBytes(v), 0, 8);
+            return SafeWrite(pipe, BitConverter.GetBytes(v));
         }
 
         public static ulong ReadQword(PipeStream pipe)
@@ -55,12 +78,10 @@ namespace DotNetDataCollectorEx
             return BitConverter.ToUInt64(array, 0);
         }
 
-        public static void WriteUTF8String(PipeStream pipe, string str)
+        public static bool WriteUTF8String(PipeStream pipe, string str)
         {
             byte[] bytes = Encoding.UTF8.GetBytes(str);
-            WriteDword(pipe, (uint)bytes.Length);
-            if (bytes.Length > 0)
-                pipe.Write(bytes, 0, bytes.Length);
+            return WriteDword(pipe, (uint)bytes.Length) && (bytes.Length == 0 || SafeWrite(pipe, bytes));
         }
 
         public static string ReadUTF8String(PipeStream pipe)
@@ -71,28 +92,25 @@ namespace DotNetDataCollectorEx
             return Encoding.UTF8.GetString(bytes);
         }
 
-        public static void WriteUTF16String(PipeStream pipe, string str)
+        public static bool WriteUTF16String(PipeStream pipe, string str)
         {
             byte[] bytes = Encoding.Unicode.GetBytes(str);
-            WriteDword(pipe, (uint)bytes.Length);
-            if (bytes.Length > 0)
-                pipe.Write(bytes, 0, bytes.Length);
+            return WriteDword(pipe, (uint)bytes.Length) && (bytes.Length == 0 || SafeWrite(pipe, bytes));
         }
 
         public static string ReadUTF16String(PipeStream pipe)
         {
             int length = (int)ReadDword(pipe);
+            //Logger.LogInfo($"String length: {length}");
             byte[] bytes = new byte[length];
             _ = pipe.Read(bytes, 0, length);
             return Encoding.Unicode.GetString(bytes);
         }
 
-        public static void WriteASCIIString(PipeStream pipe, string str)
+        public static bool WriteASCIIString(PipeStream pipe, string str)
         {
             byte[] bytes = Encoding.ASCII.GetBytes(str);
-            WriteDword(pipe, (uint)bytes.Length);
-            if (bytes.Length > 0)
-                pipe.Write(bytes, 0, bytes.Length);
+            return WriteDword(pipe, (uint)bytes.Length) && (bytes.Length == 0 || SafeWrite(pipe, bytes));
         }
 
         public static string ReadASCIIString(PipeStream pipe)
@@ -105,10 +123,10 @@ namespace DotNetDataCollectorEx
             return Encoding.ASCII.GetString(bytes);
         }
 
-        public static void WriteByteArray(PipeStream pipe, byte[] v)
+        public static bool WriteByteArray(PipeStream pipe, byte[] v)
         {
-            WriteDword(pipe, (uint)v.Length);
-            pipe.Write(v, 0, v.Length);
+            bool result = WriteDword(pipe, (uint)v.Length);
+            return result && SafeWrite(pipe, v);
         }
 
         public static byte[] ReadByteArray(PipeStream pipe)

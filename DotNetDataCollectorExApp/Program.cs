@@ -8,8 +8,6 @@
 
         private static bool noLegacyDataCollector = false;
 
-        private static bool forceLegacyDataCollector = false;
-
         private static void HandleArgs(string[] args)
         {
             for (int i = 0; i < args.Length; i++)
@@ -24,9 +22,6 @@
                 {
                     case "-nldc":
                         noLegacyDataCollector = true;
-                        break;
-                    case "-forceldc":
-                        forceLegacyDataCollector = true;
                         break;
                     default:
                         Logger.LogWarning($"Invalid args passed: '{args[i]}'");
@@ -72,11 +67,11 @@
 #endif
             };
 
-            pipeServer = new PipeServer(pipeName, noLegacyDataCollector, forceLegacyDataCollector);
+            pipeServer = new PipeServer(pipeName, noLegacyDataCollector);
 
             pipeServer.RunLoop();
 
-            //pipeServer.legacyDotNetDataCollectorProcess?.Kill();
+            pipeServer.legacyDotNetDataCollectorProcess?.Kill();
 
 #if DEBUG
             Console.ReadLine();

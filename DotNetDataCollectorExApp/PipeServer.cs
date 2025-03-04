@@ -6,13 +6,15 @@ using System.Text;
 
 namespace DotNetDataCollectorEx
 {
-    public class PipeServer(string pipeName, bool noLegacyDataCollector = false, bool forceLegacyDataCollector = false, bool isExPipe = false)
+    public class PipeServer(string pipeName, bool noLegacyDataCollector = false, bool isExPipe = false)
     {
         private const ushort PipeMajorVersion = 1; // Newer versions mean possibly breaking changes.
 
         private const ushort PipeMinorVersion = 1; // Newer versions might be new functions for example, but no breaking changes to older Versions.
 
         private const uint PipeVersion = (uint)PipeMajorVersion << 16 | PipeMinorVersion;
+
+        private const int LegacyPipeConnectionTimeout = 5000;
 
         internal static readonly ClrMDInspector inspector = new();
 
@@ -33,8 +35,6 @@ namespace DotNetDataCollectorEx
         private NamedPipeClientStream? forwarderPipe;
 
         private readonly bool _noLegacyDataCollector = noLegacyDataCollector;
-
-        private readonly bool _forceLegacyDataCollector = forceLegacyDataCollector;
 
         private PipeServerState state = PipeServerState.Loaded;
 
@@ -93,7 +93,7 @@ namespace DotNetDataCollectorEx
             Attached = 1 << 1, // Is attached to the process -> If AttachedEx is not set then it is only forwading to the legacy DC. -> Maybe failed to attach / Legacy DC is forced
             AttachedEx = 1 << 2, // Is attached and running the DataCollectorEx Pipe -> Not just forwarding to the legacy DataCollector
             PipeExCreated = 1 << 3, // The Ex Pipe has been created
-            LegacyDCForced = 1 << 4, // Legacy DC is being forced
+            LegacyDataCollectorRunning = 1 << 4, // Legacy DC is running
             RunningAsExtension = 1 << 5, // Is running as an extension to the legacy DC. Meaning Cheat Engine started the legacy DC and we created the new process
             NotLoaded = 1 << 6, // DCEx has not been loaded (this process not running) only checked by the Lua Script internally as when this process is running it is already loaded
             TriedAttach = 1 << 7, // Has tried to attach to the process, this can be used to check if it has already tried and maybe failed to actually attach
@@ -285,7 +285,7 @@ namespace DotNetDataCollectorEx
             string pipeName = $"exdotnetpipe_{_processID}_{Environment.TickCount}";
             state |= PipeServerState.PipeExCreated;
             _pipeNameEx = pipeName;
-            _pipeServerEx = new(pipeName, true, false, true)
+            _pipeServerEx = new(pipeName, true, true)
             {
                 state = state,
                 _pipeServerEx = this,
@@ -440,6 +440,17 @@ namespace DotNetDataCollectorEx
             WriteBool(module.IsDynamic);
         }
 
+        private void CloseForwarderPipe()
+        {
+            Logger.LogWarning("Legacy DotNetDataCollector Pipe closed!");
+            forwarderPipe?.Close();
+            forwarderPipe = null;
+            state &= ~PipeServerState.LegacyDataCollectorRunning; // Tell state that Legacy DataCollector is not running anymore
+            if (_pipeServerEx != null)
+                _pipeServerEx.state &= ~PipeServerState.LegacyDataCollectorRunning; // Also tell the other pipe if it is running
+            legacyDotNetDataCollectorProcess?.Kill();
+        }
+
         #endregion
 
         #region LegacyCommands
@@ -447,18 +458,22 @@ namespace DotNetDataCollectorEx
         private void LegacyEnumDomains()
         {
             if (forwarderPipe != null)
-            {
-                PipeHelper.WriteByte(forwarderPipe, (byte)Commands.L_CMD_ENUMDOMAINS);
-                uint domainCount = PipeHelper.ReadDword(forwarderPipe);
-                WriteDword(domainCount);
-                for (uint i = 0; i < domainCount; i++)
+            {            
+                if (!PipeHelper.WriteByte(forwarderPipe, (byte)Commands.L_CMD_ENUMDOMAINS))
+                    CloseForwarderPipe();
+                else
                 {
-                    ulong hDomain = PipeHelper.ReadQword(forwarderPipe);
-                    WriteQword(hDomain);
-                    string domainName = PipeHelper.ReadUTF16String(forwarderPipe);
-                    WriteUTF16String(domainName);
-                }
-                return;
+                    uint domainCount = PipeHelper.ReadDword(forwarderPipe);
+                    WriteDword(domainCount);
+                    for (uint i = 0; i < domainCount; i++)
+                    {
+                        ulong hDomain = PipeHelper.ReadQword(forwarderPipe);
+                        WriteQword(hDomain);
+                        string domainName = PipeHelper.ReadUTF16String(forwarderPipe);
+                        WriteUTF16String(domainName);
+                    }
+                    return;
+                } // Skip forwarder section if pipe has already been closed
             }
             ClrAppDomain[] appDomains = [.. inspector.EnumerateAppDomains()];
             WriteDword((uint)appDomains.Length);
@@ -475,22 +490,25 @@ namespace DotNetDataCollectorEx
             ulong hDomain = ReadQword();
             if (forwarderPipe != null)
             {
-                PipeHelper.WriteByte(forwarderPipe, (byte)Commands.L_CMD_ENUMMODULELIST);
-                PipeHelper.WriteQword(forwarderPipe, hDomain);
-
-                uint moduleCount = PipeHelper.ReadDword(forwarderPipe);
-                WriteDword(moduleCount);
-
-                for (uint i = 0; i < moduleCount; i++)
+                _ = PipeHelper.WriteByte(forwarderPipe, (byte)Commands.L_CMD_ENUMMODULELIST);
+                if (!PipeHelper.WriteQword(forwarderPipe, hDomain))
+                    CloseForwarderPipe();
+                else
                 {
-                    ulong hModule = PipeHelper.ReadQword(forwarderPipe);
-                    ulong baseAddress = PipeHelper.ReadQword(forwarderPipe);
-                    string moduleName = PipeHelper.ReadUTF16String(forwarderPipe);
-                    WriteQword(hModule);
-                    WriteQword(baseAddress);
-                    WriteUTF16String(moduleName);
-                }
-                return;
+                    uint moduleCount = PipeHelper.ReadDword(forwarderPipe);
+                    WriteDword(moduleCount);
+
+                    for (uint i = 0; i < moduleCount; i++)
+                    {
+                        ulong hModule = PipeHelper.ReadQword(forwarderPipe);
+                        ulong baseAddress = PipeHelper.ReadQword(forwarderPipe);
+                        string moduleName = PipeHelper.ReadUTF16String(forwarderPipe);
+                        WriteQword(hModule);
+                        WriteQword(baseAddress);
+                        WriteUTF16String(moduleName);
+                    }
+                    return;
+                } // Skip forwarder section if pipe has already been closed
             }
 
             ClrModule[] modules;
@@ -514,25 +532,28 @@ namespace DotNetDataCollectorEx
             ulong hModule = ReadQword();
             if (forwarderPipe != null)
             {
-                PipeHelper.WriteByte(forwarderPipe, (byte)Commands.L_CMD_ENUMTYPEDEFS);
-                PipeHelper.WriteQword(forwarderPipe, hModule);
-
-                uint typeCount = PipeHelper.ReadDword(forwarderPipe);
-                WriteDword(typeCount);
-
-                for (uint i = 0; i < typeCount; i++)
+                _ = PipeHelper.WriteByte(forwarderPipe, (byte)Commands.L_CMD_ENUMTYPEDEFS);
+                if (!PipeHelper.WriteQword(forwarderPipe, hModule))
+                    CloseForwarderPipe();
+                else
                 {
-                    uint typeToken = PipeHelper.ReadDword(forwarderPipe);
-                    string typeName = PipeHelper.ReadUTF16String(forwarderPipe);
-                    uint flags = PipeHelper.ReadDword(forwarderPipe);
-                    uint extends = PipeHelper.ReadDword(forwarderPipe);
+                    uint typeCount = PipeHelper.ReadDword(forwarderPipe);
+                    WriteDword(typeCount);
 
-                    WriteDword(typeToken);
-                    WriteUTF16String(typeName);
-                    WriteDword(flags);
-                    WriteDword(extends);
+                    for (uint i = 0; i < typeCount; i++)
+                    {
+                        uint typeToken = PipeHelper.ReadDword(forwarderPipe);
+                        string typeName = PipeHelper.ReadUTF16String(forwarderPipe);
+                        uint flags = PipeHelper.ReadDword(forwarderPipe);
+                        uint extends = PipeHelper.ReadDword(forwarderPipe);
+
+                        WriteDword(typeToken);
+                        WriteUTF16String(typeName);
+                        WriteDword(flags);
+                        WriteDword(extends);
+                    }
+                    return;
                 }
-                return;
             }
             ClrType[] types = [.. inspector.EnumerateTypes(hModule)];
             WriteDword((uint)types.Length);
@@ -553,40 +574,45 @@ namespace DotNetDataCollectorEx
             uint typeDefToken = ReadDword();
             if (forwarderPipe != null)
             {
-                PipeHelper.WriteByte(forwarderPipe, (byte)Commands.L_CMD_GETTYPEDEFMETHODS);
-                PipeHelper.WriteQword(forwarderPipe, hModule);
-                PipeHelper.WriteDword(forwarderPipe, typeDefToken);
-
-                uint methodCount = PipeHelper.ReadDword(forwarderPipe);
-                WriteDword(methodCount);
-
-                for (uint i = 0; i < methodCount; i++)
+                _ = PipeHelper.WriteByte(forwarderPipe, (byte)Commands.L_CMD_GETTYPEDEFMETHODS);
+                _ = PipeHelper.WriteQword(forwarderPipe, hModule);
+                if (!PipeHelper.WriteDword(forwarderPipe, typeDefToken))
+                    CloseForwarderPipe();
+                else
                 {
-                    uint methodToken = PipeHelper.ReadDword(forwarderPipe);
-                    string methodName = PipeHelper.ReadUTF16String(forwarderPipe);
-                    uint attributes = PipeHelper.ReadDword(forwarderPipe);
-                    uint implFlags = PipeHelper.ReadDword(forwarderPipe);
-                    ulong ILCode = PipeHelper.ReadQword(forwarderPipe);
-                    ulong nativeCode = PipeHelper.ReadQword(forwarderPipe);
-                    uint secondaryCodeBlocks = PipeHelper.ReadDword(forwarderPipe);
+                    uint methodCount = PipeHelper.ReadDword(forwarderPipe);
+                    WriteDword(methodCount);
 
-                    WriteDword(methodToken);
-                    WriteUTF16String(methodName);
-                    WriteDword(attributes);
-                    WriteDword(implFlags);
-                    WriteQword(ILCode);
-                    WriteQword(nativeCode);
-
-                    WriteDword(secondaryCodeBlocks);
-
-                    for (uint j = 0; j < secondaryCodeBlocks; j++)
+                    for (uint i = 0; i < methodCount; i++)
                     {
-                        byte[] codeChunkInfo = new byte[Marshal.SizeOf<CodeChunkInfo>()];
-                        _ = forwarderPipe.Read(codeChunkInfo);
-                        pipe.Write(codeChunkInfo);
+                        uint methodToken = PipeHelper.ReadDword(forwarderPipe);
+                        string methodName = PipeHelper.ReadUTF16String(forwarderPipe);
+                        uint attributes = PipeHelper.ReadDword(forwarderPipe);
+                        uint implFlags = PipeHelper.ReadDword(forwarderPipe);
+                        ulong ILCode = PipeHelper.ReadQword(forwarderPipe);
+                        ulong nativeCode = PipeHelper.ReadQword(forwarderPipe);
+                        uint secondaryCodeBlocks = PipeHelper.ReadDword(forwarderPipe);
+
+                        WriteDword(methodToken);
+                        WriteUTF16String(methodName);
+                        WriteDword(attributes);
+                        WriteDword(implFlags);
+                        WriteQword(ILCode);
+                        WriteQword(nativeCode);
+
+                        WriteDword(secondaryCodeBlocks);
+
+                        for (uint j = 0; j < secondaryCodeBlocks; j++)
+                        {
+                            byte[] codeChunkInfo = new byte[0x10];
+                            //byte[] codeChunkInfo = new byte[Marshal.SizeOf<CodeChunkInfo>()];
+                            //_ = forwarderPipe.Read(codeChunkInfo); // Should read 0x10!!!
+                            _ = forwarderPipe.Read(codeChunkInfo);
+                            pipe.Write(codeChunkInfo);
+                        }
                     }
+                    return;
                 }
-                return;
             }
 
             ClrMethod[] methods = [.. inspector.EnumerateMethods(hModule, (int)typeDefToken)];
@@ -628,7 +654,7 @@ namespace DotNetDataCollectorEx
                 {
                     //Logger.LogInfo($"Code Chucks Count: {codeChunks.Count} | SR: {cki.startAddr:X} | Length: {cki.length} | Size of Struct: {Marshal.SizeOf<CodeChunkInfo>()}");
                     byte[] structBytes = PipeHelper.StructToBytes(cki);
-                    pipe.Write(structBytes, 0, structBytes.Length);
+                    pipe.Write(structBytes, 0, structBytes.Length); // TODO: CE Seems to excpect 16 bytes and not 12 but this seems to still work... weird
                     //WriteQword(cki.startAddr);
                     //WriteDword(cki.length);
                 }
@@ -666,6 +692,7 @@ namespace DotNetDataCollectorEx
             WriteUTF16String(typeName);
 
             uint fieldCount = PipeHelper.ReadDword(forwarderPipe);
+            WriteDword(fieldCount);
 
             for (uint i = 0; i < fieldCount; i++)
             {
@@ -781,16 +808,22 @@ namespace DotNetDataCollectorEx
 
             if (forwarderPipe != null)
             {
-                PipeHelper.WriteByte(forwarderPipe, (byte)Commands.L_CMD_GETADDRESSDATA);
-                PipeHelper.WriteQword(forwarderPipe, address);
-                ulong startAddress = PipeHelper.ReadQword(forwarderPipe);
+                _ = PipeHelper.WriteByte(forwarderPipe, (byte)Commands.L_CMD_GETADDRESSDATA);
+                if (!PipeHelper.WriteQword(forwarderPipe, address))
+                    CloseForwarderPipe();
+                else
+                {
+                    ulong startAddress = PipeHelper.ReadQword(forwarderPipe);
 
-                WriteQword(startAddress);
 
-                if (startAddress == 0)
+                    WriteQword(startAddress);
+
+                    if (startAddress == 0)
+                        return;
+
+                    LegacyPipeForwardType();
                     return;
-                LegacyPipeForwardType();
-                return;
+                }
             }
             // Handle new Version
             ClrObject? obj = inspector.GetObjectForAddress(address);
@@ -816,24 +849,28 @@ namespace DotNetDataCollectorEx
                 byte[] typeidBytes;
                 string objName;
                 COR_TYPEID typeid;
-
-                do
+                if (!PipeHelper.WriteByte(forwarderPipe, (byte)Commands.L_CMD_GETALLOBJECTS))
+                    CloseForwarderPipe();
+                else
                 {
-                    PipeHelper.WriteByte(forwarderPipe, (byte)Commands.L_CMD_GETALLOBJECTS);
-                    objAddress = PipeHelper.ReadQword(forwarderPipe);
-                    objSize = PipeHelper.ReadDword(forwarderPipe);
-                    typeidBytes = new byte[Marshal.SizeOf<COR_TYPEID>()];
-                    _ = forwarderPipe.Read(typeidBytes);
-                    objName = PipeHelper.ReadUTF16String(forwarderPipe);
-                    typeid = PipeHelper.ByteArrayToStructure<COR_TYPEID>(typeidBytes);
+                    do
+                    {
+                        objAddress = PipeHelper.ReadQword(forwarderPipe);
+                        objSize = PipeHelper.ReadDword(forwarderPipe);
+                        typeidBytes = new byte[Marshal.SizeOf<COR_TYPEID>()];
+                        _ = forwarderPipe.Read(typeidBytes);
+                        objName = PipeHelper.ReadUTF16String(forwarderPipe);
+                        typeid = PipeHelper.ByteArrayToStructure<COR_TYPEID>(typeidBytes);
 
-                    WriteQword(objAddress);
-                    WriteDword(objSize);
-                    forwarderPipe.Write(typeidBytes);
-                    WriteUTF16String(objName);
-                } while (objAddress != 0 || objSize != 0 || typeid.token1 != 0 || typeid.token2 != 0); //  && !string.IsNullOrEmpty(objName)
+                        WriteQword(objAddress);
+                        WriteDword(objSize);
+                        pipe.Write(typeidBytes);
+                        //forwarderPipe.Write(typeidBytes);
+                        WriteUTF16String(objName);
+                    } while (objAddress != 0 || objSize != 0 || typeid.token1 != 0 || typeid.token2 != 0); //  && !string.IsNullOrEmpty(objName)
 
-                return;
+                    return;
+                }
             }
             foreach (ClrObject obj in inspector.EnumerateObjects())
             {
@@ -844,7 +881,8 @@ namespace DotNetDataCollectorEx
                 ClrType objType = obj.Type!; // Type will not be null because obj.IsValid checks for that
                 byte[] typeidBytes = PipeHelper.StructToBytes(new COR_TYPEID()
                 {
-                    token1 = objType.MethodTable // don't know if this is correct
+                    token1 = objType.MethodTable // don't know if this is correct but seems so
+                    // token2 seems to always be 0...
                 });
                 pipe.Write(typeidBytes);
                 WriteUTF16String(objType.Name ?? string.Empty);
@@ -862,11 +900,15 @@ namespace DotNetDataCollectorEx
             uint typeDef = ReadDword();
             if (forwarderPipe != null)
             {
-                PipeHelper.WriteByte(forwarderPipe, (byte)Commands.L_CMD_GETTYPEDEFFIELDS);
-                PipeHelper.WriteQword(forwarderPipe, hModule);
-                PipeHelper.WriteDword(forwarderPipe, typeDef);
-                LegacyPipeForwardType();
-                return;
+                _ = PipeHelper.WriteByte(forwarderPipe, (byte)Commands.L_CMD_GETTYPEDEFFIELDS);
+                _ = PipeHelper.WriteQword(forwarderPipe, hModule);
+                if (!PipeHelper.WriteDword(forwarderPipe, typeDef))
+                    CloseForwarderPipe();
+                else
+                {
+                    LegacyPipeForwardType();
+                    return;
+                }
             }
             ClrType? type = inspector.GetType(hModule, (int)typeDef);
             if (type == null)
@@ -883,24 +925,27 @@ namespace DotNetDataCollectorEx
             uint methodDef = ReadDword();
             if (forwarderPipe != null)
             {
-                PipeHelper.WriteByte(forwarderPipe, (byte)Commands.L_CMD_GETMETHODPARAMETERS);
-                PipeHelper.WriteQword(forwarderPipe, hModule);
-                PipeHelper.WriteDword(forwarderPipe, methodDef);
-
-                uint count = PipeHelper.ReadDword(forwarderPipe);
-                WriteDword(count);
-
-                for (uint i = 0; i < count; i++)
+                _ = PipeHelper.WriteByte(forwarderPipe, (byte)Commands.L_CMD_GETMETHODPARAMETERS);
+                _ = PipeHelper.WriteQword(forwarderPipe, hModule);
+                if (!PipeHelper.WriteDword(forwarderPipe, methodDef))
+                    CloseForwarderPipe();
+                else
                 {
-                    string name = PipeHelper.ReadUTF16String(forwarderPipe);
-                    uint cplusTypeFlag = PipeHelper.ReadDword(forwarderPipe);
-                    uint sequence = PipeHelper.ReadDword(forwarderPipe);
+                    uint count = PipeHelper.ReadDword(forwarderPipe);
+                    WriteDword(count);
 
-                    WriteUTF16String(name);
-                    WriteDword(cplusTypeFlag);
-                    WriteDword(sequence);
+                    for (uint i = 0; i < count; i++)
+                    {
+                        string name = PipeHelper.ReadUTF16String(forwarderPipe);
+                        uint cplusTypeFlag = PipeHelper.ReadDword(forwarderPipe);
+                        uint sequence = PipeHelper.ReadDword(forwarderPipe);
+
+                        WriteUTF16String(name);
+                        WriteDword(cplusTypeFlag);
+                        WriteDword(sequence);
+                    }
+                    return;
                 }
-                return;
             }
             ClrMethod? method = inspector.GetMethod(hModule, (int)methodDef);
             if (method == null)
@@ -926,16 +971,19 @@ namespace DotNetDataCollectorEx
             uint typeDef = ReadDword();
             if (forwarderPipe != null)
             {
-                PipeHelper.WriteByte(forwarderPipe, (byte)Commands.L_CMD_GETTYPEDEFPARENT);
-                PipeHelper.WriteQword(forwarderPipe, hModule);
-                PipeHelper.WriteDword(forwarderPipe, typeDef);
+                _ = PipeHelper.WriteByte(forwarderPipe, (byte)Commands.L_CMD_GETTYPEDEFPARENT);
+                _ = PipeHelper.WriteQword(forwarderPipe, hModule);
+                if (!PipeHelper.WriteDword(forwarderPipe, typeDef))
+                    CloseForwarderPipe();
+                else
+                {
+                    ulong phModule = PipeHelper.ReadQword(forwarderPipe);
+                    uint ptypeDef = PipeHelper.ReadDword(forwarderPipe);
 
-                ulong phModule = PipeHelper.ReadQword(forwarderPipe);
-                uint ptypeDef = PipeHelper.ReadDword(forwarderPipe);
-
-                WriteQword(phModule);
-                WriteDword(ptypeDef);
-                return;
+                    WriteQword(phModule);
+                    WriteDword(ptypeDef);
+                    return;
+                }
             }
             ClrType? type = inspector.GetType(hModule, (int)typeDef);
             if (type == null)
@@ -961,18 +1009,21 @@ namespace DotNetDataCollectorEx
             uint typeDef = ReadDword();
             if (forwarderPipe != null)
             {
-                PipeHelper.WriteByte(forwarderPipe, (byte)Commands.L_CMD_GETALLOBJECTSOFTYPE);
-                PipeHelper.WriteQword(forwarderPipe, hModule);
-                PipeHelper.WriteDword(forwarderPipe, typeDef);
-
-                ulong objAddr;
-
-                do
+                _ = PipeHelper.WriteByte(forwarderPipe, (byte)Commands.L_CMD_GETALLOBJECTSOFTYPE);
+                _ = PipeHelper.WriteQword(forwarderPipe, hModule);
+                if (!PipeHelper.WriteDword(forwarderPipe, typeDef))
+                    CloseForwarderPipe();
+                else
                 {
-                    objAddr = PipeHelper.ReadQword(forwarderPipe);
-                    WriteQword(objAddr);
-                } while (objAddr != 0);
-                return;
+                    ulong objAddr;
+
+                    do
+                    {
+                        objAddr = PipeHelper.ReadQword(forwarderPipe);
+                        WriteQword(objAddr);
+                    } while (objAddr != 0);
+                    return;
+                }
             }
 
             if (inspector.GetType(hModule, (int)typeDef) == null) // Check if type exists before going through heap
@@ -1007,7 +1058,7 @@ namespace DotNetDataCollectorEx
                 WriteBool(false);
 
             // Is Legacy DataCollector running
-            if (_noLegacyDataCollector || forwarderPipe == null)
+            if ((state & PipeServerState.LegacyDataCollectorRunning) != 0)
                 WriteBool(false);
             else
                 WriteBool(true);
@@ -1543,9 +1594,7 @@ namespace DotNetDataCollectorEx
 
         public void RunLoop()
         {
-            if (_forceLegacyDataCollector)
-                state |= PipeServerState.LegacyDCForced;
-            if (_noLegacyDataCollector) // Maybe find better way to check for this?
+            if (_noLegacyDataCollector)
                 state |= PipeServerState.RunningAsExtension;
             pipe.WaitForConnection();
             while (true)
@@ -1580,10 +1629,12 @@ namespace DotNetDataCollectorEx
                             state |= PipeServerState.AttachedEx;
                             ClrExtensions.ClearClrElementTypeCache(); // Clear the Type cache if we changed the process!
                         }
+                        else
+                            Logger.LogWarning("Failed to attach to Process with DataCollectorEx");
 
-                        if (_forceLegacyDataCollector || !result && !_noLegacyDataCollector)
+                        if ((state & PipeServerState.RunningAsExtension) == 0)
                         {
-                            Logger.LogWarning("Failed to attach to Process trying to start Legacy DataCollector!");
+                            //Logger.LogWarning("Failed to attach to Process trying to start Legacy DataCollector!");
                             try
                             {
                                 legacyDotNetDataCollectorPipeName = $"legacycedotnetpipe_{processId}_{Environment.TickCount}";
@@ -1593,33 +1644,62 @@ namespace DotNetDataCollectorEx
                                     Arguments = legacyDotNetDataCollectorPipeName,
                                     CreateNoWindow = true
                                 });
-
-                                forwarderPipe = new NamedPipeClientStream(".", pipeName, PipeDirection.InOut);
-                                forwarderPipe.Connect();
+                                forwarderPipe = new NamedPipeClientStream(".", legacyDotNetDataCollectorPipeName, PipeDirection.InOut);
+                                forwarderPipe.Connect(LegacyPipeConnectionTimeout);
                                 Logger.LogInfo("Legacy DotNetDataCollector started!");
+
                                 PipeHelper.WriteByte(forwarderPipe, (byte)Commands.L_CMD_TARGETPROCESS);
                                 // Forward command/result
                                 PipeHelper.WriteDword(forwarderPipe, processId);
-                                result = PipeHelper.ReadBool(forwarderPipe);
+                                result = PipeHelper.ReadDword(forwarderPipe) != 0; // DataCollector seems to send 4 bytes -> bool...
+                                //result = PipeHelper.ReadBool(forwarderPipe);
+                                if (result)
+                                {
+                                    state |= PipeServerState.LegacyDataCollectorRunning; // Set Legacy DataCollector as Running
+                                }
+                                else
+                                {
+                                    Logger.LogWarning("Legacy DataCollector says can't connect!");
+                                    forwarderPipe.Dispose();
+                                    forwarderPipe = null;
+                                }
                             }
                             catch (Exception ex)
                             {
-                                Logger.LogException(ex);
-                                Logger.LogError("Failed to create legacy DotNetDataCollector!");
-                                WriteBool(false);
-                                WriteBool(false);
-                                return;
+                                if (ex is TimeoutException)
+                                {
+                                    Logger.LogError("Legacy pipe connection timeout!");
+                                }
+                                else
+                                {
+                                    Logger.LogException(ex);
+                                    Logger.LogError("Failed to create legacy DotNetDataCollector!");
+                                }
+
+                                forwarderPipe?.Dispose();
+                                forwarderPipe = null;
+
+                                if (!result)
+                                {
+                                    WriteBool(false);
+                                    WriteBool(false);
+                                    return;
+                                }
                             }
                         }
-                        if (result) // Check if it attached to either DCEx or legacy DC
+                        if ((state & PipeServerState.AttachedEx) != 0)
+                            result = true;
+                        if (result) // Check if it attached to either DCEx, legacy DC or both
                             state |= PipeServerState.Attached;
-                        WriteBool(result); // Sucessfully attached
+                        WriteBool(result); // Sucessfully attached TODO: DotNetDataCollector seems to send 4 bytes and not 1?
 
                         if (forwarderPipe != null)
                         {
-                            result = PipeHelper.ReadBool(forwarderPipe);
+                            result = PipeHelper.ReadDword(forwarderPipe) != 0; // DataCollector seems to send 4 bytes -> bool...
+                            //Console.WriteLine(result);
+                            //result = PipeHelper.ReadBool(forwarderPipe);
                         }
-                        WriteBool(result); // supports structure type lookups
+                        WriteBool(result); // supports structure type lookups TODO: DotNetDataCollector seems to send 4 bytes and not 1?
 
                         break;
                     case (byte)Commands.L_CMD_CLOSEPROCESSANDQUIT:
@@ -1629,15 +1709,15 @@ namespace DotNetDataCollectorEx
                         return;
                     case (byte)Commands.L_CMD_RELEASEOBJECTHANDLE:
                         ulong hObject = ReadQword();
-                        if (forwarderPipe != null)
-                        {
-                            WriteByte((byte)Commands.L_CMD_RELEASEOBJECTHANDLE);
-                            PipeHelper.WriteQword(forwarderPipe, hObject);
-                            break;
-                        }
 #if DEBUG
                         Logger.LogInfo($"L_CMD_RELEASEOBJECTHANDLE called for hObject: 0x{hObject:X}");
 #endif
+                        if (forwarderPipe != null)
+                        {
+                            _ = PipeHelper.WriteByte(forwarderPipe, (byte)Commands.L_CMD_RELEASEOBJECTHANDLE);
+                            if (!PipeHelper.WriteQword(forwarderPipe, hObject))
+                                CloseForwarderPipe();
+                        }
                         break;
                     case (byte)Commands.L_CMD_ENUMDOMAINS:
                         LegacyEnumDomains();

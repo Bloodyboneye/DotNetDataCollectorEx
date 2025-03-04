@@ -9,6 +9,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Added
 - Parsing Method/Parameter Metadata to be in line with the legacy data collector and add stuff like parameter names instead of only parameter **type** names
 - Parsing other Metadata manually to add more functionality
+- Adding structure handling and other similar stuff to the `DotNetDataCollectorEx.lua` file so the `Dissect data/structures` and other symbol handler stuff works in **Extension Mode**
 
 ---
 

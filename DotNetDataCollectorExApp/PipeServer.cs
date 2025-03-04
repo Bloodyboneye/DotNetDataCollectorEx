@@ -8,9 +8,9 @@ namespace DotNetDataCollectorEx
 {
     public class PipeServer(string pipeName, bool noLegacyDataCollector = false, bool isExPipe = false)
     {
-        private const ushort PipeMajorVersion = 1; // Newer versions mean possibly breaking changes.
+        private const ushort PipeMajorVersion = 2; // Newer versions mean possibly breaking changes.
 
-        private const ushort PipeMinorVersion = 1; // Newer versions might be new functions for example, but no breaking changes to older Versions.
+        private const ushort PipeMinorVersion = 0; // Newer versions might be new functions for example, but no breaking changes to older Versions.
 
         private const uint PipeVersion = (uint)PipeMajorVersion << 16 | PipeMinorVersion;
 

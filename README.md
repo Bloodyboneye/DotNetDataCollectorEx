@@ -17,7 +17,7 @@
 
 There are two installation methods for **DotNetDataCollectorEx**:
 
-### **1. Replacement Mode (Not Recommended)**
+### **1. Replacement Mode (Recommended in most cases unless you never or rarely use it for .net8+ targets)**
 
 1. Locate your **Cheat Engine** installation folder.
 2. Rename the existing **DotNetDataCollector32.exe** and **DotNetDataCollector64.exe** to **LegacyDotNetDataCollector32.exe** **LegacyDotNetDataCollector64.exe** respectively.
@@ -26,9 +26,10 @@ There are two installation methods for **DotNetDataCollectorEx**:
 5. (OPTIONAL) Copy `DotNetDataCollectorEx.lua` into the `autorun` folder.
 6. Restart **Cheat Engine**.
 
-Now, Cheat Engine will use **DotNetDataCollectorEx**, but will fall back to the legacy collector for older .NET versions.
+Now, Cheat Engine will start the **DotNetDataCollectorEx** which will under normal circumstances forward everything to the Legacy DotNetDataCollector unless it can't be used on the target (**.net8+**) or it breaks in which case it will use **DotNetDataCollectorEx**.
+If you place the `DotNetDataCollectorEx.lua` file into the `autorun` folder then you can also use the Extended functionality in **.net Framework 4.5+** targets.
 
-### **2. Extension Mode (Recommended)**
+### **2. Extension Mode (Recommended if you only want the extra functionality or rarely target .net8+ targets)**
 
 1. Keep the existing **DotNetDataCollector.exe's** in place.
 2. Copy `DotNetDataCollectorEx32.exe` and `DotNetDataCollectorEx64.exe` into one of the folders defined in the lua script inside the `processlocations` table.
@@ -43,13 +44,17 @@ Now, Cheat Engine will use **DotNetDataCollectorEx**, but will fall back to the 
 In this mode:
 - **DotNetDataCollectorEx** runs alongside the legacy **DotNetDataCollector**.
 - You can **dynamically replace the legacy collector** later using a Lua function. For more info refer to [this section](#replace-legacy-datacollector-using-lua)
+- Replacing the **legacy collector** will only work on the **lua side**! This means that the **symbol handler** and **Data Disector** (**currently**) won't work!
 
 ### **Replace Legacy DataCollector Using Lua**
 - `ReplaceLegacyDataCollector(restore)`
 - A method of the object returned by `getDotNetDataCollectorEx()`.
+- Should only be used/required if you use it in **Extension Mode** and not **Replacement Mode**.
 - Replaces the legacy **DotNetDataCollector** with **DotNetDataCollectorEx** at runtime.
 - Use this function to switch to the new collector for **.NET 8+** applications.
 - If you want to restore the legacy **DotNetDataCollector** you can call this function with `restore` being `true`
+- Do note that this will only replace it on the **lua side**!
+- If used in **Extension Mode** then the **symbol handler** and **Data Disector** (**currently**) won't work (give no info)!
 
 - #### Example Usage in Lua:
 ```lua
@@ -67,20 +72,16 @@ end
 
 ## Recommended Usage
 
-For maximum flexibility, it is recommended to use **DotNetDataCollectorEx** in **Extension Mode**. This mode provides the following benefits:
+# Using **DotNetDataCollectorEx** in **Replacement Mode** provides the following benefits:
+- Will by default still use the **Legacy DotNetDataCollector** unless it can't (**.net 8+**) or the **Legacy DotNetDataCollector** breaks.
+- Cheat Engines **Symbol Handler** and **Data Disector** work and provide info even on **.net 8+** targets.
+- Can use extra functions if the `DotNetDataCollectorEx.lua` file is placed inside the `autorun` folder.
 
-- **Legacy DotNetDataCollector**:
-  - Works for **.NET Framework versions older than 4.5**.
-  - Can be used alongside **DotNetDataCollectorEx** in **Extension Mode** for **.NET Framework 4.5+** applications.
+# Using **DotNetDataCollectorEx** in **Extension Mode** provides the following benefits:
+- No need to replace exectuables.
 
-- **DotNetDataCollectorEx**:
-  - Provides more functions and detailed information compared to the legacy version.
-  - Supports **.NET Framework 4.5+** and is the only version that supports **.NET 8+**.
-
-If you want to debug **.NET 8+** applications, it is **recommended** to call `ReplaceLegacyDataCollector` to replace the legacy collector, as the legacy version does not support **.NET 8+**. This is important because other **Cheat Engine** functionality that relies on **DotNetDataCollector** will only work with **.NET 8+** if you use the new version. These include but are not limited to:
+If you want to debug **.NET 8+** applications in **Extension Mode**, then it is **recommended** to call `ReplaceLegacyDataCollector` to replace the legacy collector, as the legacy version does not support **.NET 8+**. This is important because other **Cheat Engine** functionality that relies on **DotNetDataCollector** will only work with **.NET 8+** if you use the new version. These include but are not limited to:
 - The `.net Info` Window
-- **Cheat Engine's** Symbol Handler
-- **Cheat Engine's** Dissect data/structures
 - `dotnetinterface.lua` used for example for Jitting methods.
 
 ---
@@ -94,6 +95,10 @@ If you want to debug **.NET 8+** applications, it is **recommended** to call `Re
 - **DotNetDataCollectorEx**:
   - Supports **.NET Framework 4.5+** and is the only version that supports **.NET 8+**.
   - Provides, in some cases, more detailed memory analysis and additional features compared to the legacy version.
+
+- **Extension Mode**
+  - **Cheat Engine's** Symbol Handler does not work. This means no Symbols in the `Memory View` window.
+  - **Cheat Engine's** Dissect data/structures doed not work. This means no info provided for structures. So no fields are automatically filled and no name is automatically given to the structure.
 
 ### Known Limitations:
 - Certain operations may incur slightly higher performance overhead compared to the legacy collector.

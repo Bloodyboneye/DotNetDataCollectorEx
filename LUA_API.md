@@ -50,8 +50,8 @@ Does the same as **Cheat Engine's** `DotNetDataCollector` `enumModuleList(domain
 **Usage:**
 ```lua
 local modules = collectorEx.legacy_enumModuleList(domain.DomainHandle)
-for _,module in ipairs(modules) do
-  print("Module Name:" .. module.Name)
+for _,_module in ipairs(modules) do
+  print("Module Name:" .. _module.Name)
 end
 ```
 
@@ -72,8 +72,8 @@ Does the same as **Cheat Engine's** `DotNetDataCollector` `enumTypeDefs(ModuleHa
 **Usage:**
 ```lua
 local types = collectorEx.legacy_enumTypeDefs(module.ModuleHandle)
-for _,type in ipairs(types) do
-  print("Type Name:" .. type.Name)
+for _,_type in ipairs(types) do
+  print("Type Name:" .. _type.Name)
 end
 ```
 
@@ -130,8 +130,8 @@ Does the same as **Cheat Engine's** `DotNetDataCollector` `getAddressData(addres
 
 **Usage:**
 ```lua
-local object = collectorEx.legacy_getAddressData(0x123456)
-print("Class Name:" .. object.ClassName)
+local obj = collectorEx.legacy_getAddressData(0x123456)
+print("Class Name:" .. obj.ClassName)
 ```
 
 ### `legacy_enumAllObjects()`
@@ -153,8 +153,8 @@ Does the same as **Cheat Engine's** `DotNetDataCollector` `enumAllObjects()`
 **Usage:**
 ```lua
 local objects = collectorEx.legacy_enumAllObjects()
-for _,object in ipairs(objects) do
-  print("Object Class Name:" .. object.ClassName)
+for _,obj in ipairs(objects) do
+  print("Object Class Name:" .. obj.ClassName)
 end
 ```
 
@@ -246,8 +246,8 @@ Does the same as **Cheat Engine's** `DotNetDataCollector` `enumAllObjectsOfType(
 **Usage:**
 ```lua
 local objects = collectorEx.legacy_enumAllObjectsOfType(module.ModuleHandle, type.TypeDefToken)
-for _,object in ipairs(objects) do
-  printf("Object Address: %X", object)
+for _,obj in ipairs(objects) do
+  printf("Object Address: %X", obj)
 end
 ```
 
@@ -321,8 +321,8 @@ Returns a table that contains all of the loaded modules
 **Usage:**
 ```lua
 local modules = collectorEx.EnumModules()
-for _,module in ipairs(modules) do
-  print("Module Name is " .. module.Name)
+for _,_module in ipairs(modules) do
+  print("Module Name is " .. _module.Name)
 end
 ```
 
@@ -350,8 +350,8 @@ Returns a table that contains all of the loaded modules
 **Usage:**
 ```lua
 local types = collectorEx.EnumTypeDefs(module.hModule)
-for _,type in ipairs(types) do
-  print("Type Name is " .. type.Name)
+for _,_type in ipairs(types) do
+  print("Type Name is " .. _type.Name)
 end
 ```
 
@@ -511,8 +511,8 @@ Returns a table that contains information about all of the allocated Objects
 **Usage:**
 ```lua
 local objects = collectorEx.EnumAllObjects()
-for _,object in ipairs(objects) do
-  print("Object Address is " .. object.Address)
+for _,obj in ipairs(objects) do
+  print("Object Address is " .. obj.Address)
 end
 ```
 
@@ -606,8 +606,8 @@ Returns a table containing information about all of the allocated objects of the
 **Usage:**
 ```lua
 local objects = collectorEx.EnumAllObjectsOfType(type.hType)
-for _,object in ipairs(objects) do
-  printf("Object Address: %X | Size: %d", object.Address, object.Size)
+for _,obj in ipairs(objects) do
+  printf("Object Address: %X | Size: %d", obj.Address, obj.Size)
 end
 ```
 
@@ -987,8 +987,9 @@ collectorEx.FlushDACCache()
 
 ### `ReplaceLegacyDataCollector(restore)`
 **Description:**  
-Replaces the legacy `DotNetDataCollector` with `DotNetDataCollectorEx`.  
+Replaces the legacy `DotNetDataCollector` with `DotNetDataCollectorEx`.
 This is recommended for debugging **.NET 8+ applications**, as the legacy collector does not support those versions.
+Only needed if `DotNetDataCollectorEx` is run in **extension mode** and not **replacement mode**.
 
 **Parameters:**
 - `restore` (boolean): Should restore the old DotNetDataCollector?
@@ -1001,6 +1002,59 @@ collectorEx.ReplaceLegacyDataCollector(false)
 
 **Returns:**
 - A boolean (true on success and false on failure)
+
+### `DumpModule(hModule, outputFilePath)`
+**Description**
+Dumps the specified module `hModule` to disc `outputFilePath`.
+`outputFilePath` Needs to be the **full** file path including the file name!
+Can only dump modules that are not **dynamic**!
+
+**Parameters:**
+- hModule (number): The handle of the Module.
+- outputFilePath (string): The full file path, where to dump the module to.
+
+**Returns:**
+- `errorMessage` (string or nil): An error message if the operation fails, otherwise nil.
+- `filePath` (string or nil): The path to the dumped module file if successful, otherwise nil.
+
+**Usage:**
+```lua
+local collectorEx = getDotNetDataCollectorEx()
+local modules = collectorEx.EnumModules()
+local err,outpath = collectorEx.DumpModule(modules[1].hModule, "C:\\Users\\UserName\\Desktop\\DUMP_"..modules[1].Name)
+if (err) then
+  print ("Error occured while trying to dump module: "..err)
+else
+  print("Module file at: "..outpath)
+end
+```
+
+### `DumpModuleEx(module, outputPath)`
+**Description**
+Dumps the specified module `module` to disc.
+Is `outputPath` is a string then it needs to be a valid directory.
+Can only dump modules that are not **dynamic**!
+The outputted file will look like this: `outputPath\DUMP_<ModuleName>`, without the `<>`. If the Module for some reason doesn't have a name it will look like this: `outputPath\DUMP_UNKNOWNNAME_<hModule>`, without the `<>`.
+
+**Parameters:**
+- module (table): The module Table returned by `EnumModules(hDomain)`
+- (OPTIONAL) outputPath (string): The directory where to create the dumped module. If this is not a string it will dump the module to the temp directory.
+
+**Returns:**
+- `errorMessage` (string or nil): An error message if the operation fails, otherwise nil.
+- `filePath` (string or nil): The path to the dumped module file if successful, otherwise nil.
+
+**Usage:**
+```lua
+local collectorEx = getDotNetDataCollectorEx()
+local modules = collectorEx.EnumModules()
+local err,outpath = collectorEx.DumpModule(modules[1], "C:\\Users\\UserName\\Desktop\\)
+if (err) then
+  print ("Error occured while trying to dump module: "..err)
+else
+  print("Module file at: "..outpath)
+end
+```
 
 ---
 

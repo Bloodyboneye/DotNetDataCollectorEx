@@ -2,6 +2,7 @@
 using System.Diagnostics;
 using System.IO.Pipes;
 using System.Reflection;
+using System.Reflection.Metadata;
 using System.Runtime.InteropServices;
 using System.Text;
 
@@ -9,9 +10,9 @@ namespace DotNetDataCollectorEx
 {
     public class PipeServer(string pipeName, bool noLegacyDataCollector = false, bool isExPipe = false)
     {
-        private const ushort PipeMajorVersion = 2; // Newer versions mean possibly breaking changes.
+        private const ushort PipeMajorVersion = 3; // Newer versions mean possibly breaking changes.
 
-        private const ushort PipeMinorVersion = 1; // Newer versions might be new functions for example, but no breaking changes to older Versions.
+        private const ushort PipeMinorVersion = 0; // Newer versions might be new functions for example, but no breaking changes to older Versions.
 
         private const uint PipeVersion = (uint)PipeMajorVersion << 16 | PipeMinorVersion;
 
@@ -42,6 +43,10 @@ namespace DotNetDataCollectorEx
         private uint _processID;
 
         private readonly bool _isExPipe = isExPipe;
+
+        private readonly Dictionary<ulong, ModuleMetadataReader> moduleMetadataReaders = [];
+
+        private readonly HashSet<ulong> moduleMetaDataReadersCreationFailed = [];
 
         private enum Commands : byte
         {
@@ -461,6 +466,29 @@ namespace DotNetDataCollectorEx
             legacyDotNetDataCollectorProcess?.Kill();
         }
 
+        private ModuleMetadataReader? TryGetOrCreateModuleMetaDataReader(ClrModule module)
+        {
+            if (moduleMetadataReaders.TryGetValue(module.Address, out ModuleMetadataReader? value))
+                return value;
+            if (moduleMetaDataReadersCreationFailed.Contains(module.Address))
+                return null; // Failed to create in the beginning, don't try again!
+            if (module.IsDynamic || module.ImageBase == 0 || module.Size == 0)
+                return null;
+            try
+            {
+                value = new(module);
+                moduleMetadataReaders.Add(module.Address, value);
+                Logger.LogInfo($"ModuleMetadataReader created for Module: {Path.GetFileName(module.Name)}");
+            }
+            catch (Exception ex)
+            {
+#if DEBUG
+                Logger.LogException(ex);
+#endif
+            }
+            return value;
+        }
+
         #endregion
 
         #region LegacyCommands
@@ -628,13 +656,25 @@ namespace DotNetDataCollectorEx
             ClrMethod[] methods = [.. inspector.EnumerateMethods(hModule, (int)typeDefToken)];
             WriteDword((uint)methods.Length);
 
+            if (methods.Length == 0)
+                return;
+
+            ModuleMetadataReader? metadataReader = TryGetOrCreateModuleMetaDataReader(methods[0].Type.Module);
+
             foreach (ClrMethod method in methods)
             {
+                MethodDefinition? methoddef = null;
+                _ = metadataReader?.TryGetMetaData(method.MetadataToken, out methoddef);
                 ILInfo? ilInfo = method.GetILInfo();
+
+                uint implAttribs = (uint)(methoddef?.ImplAttributes ?? 0);
+                if (methoddef?.ImplAttributes == null)
+                    implAttribs = ilInfo?.Flags ?? 0;
+
                 WriteDword((uint)method.MetadataToken);
                 WriteUTF16String(method.Name ?? string.Empty);
                 WriteDword((uint)method.Attributes);
-                WriteDword(ilInfo?.Flags ?? 0); // TODO: Implement real implementation flags?
+                WriteDword(implAttribs);
                 WriteQword(ilInfo?.Address ?? 0);
                 WriteQword(method.NativeCode != ulong.MaxValue ? method.NativeCode : 0);
 
@@ -965,13 +1005,36 @@ namespace DotNetDataCollectorEx
                 WriteDword(0);
                 return;
             }
+
+            ModuleMetadataReader? metadataReader = TryGetOrCreateModuleMetaDataReader(method.Type.Module);
+            MethodDefinition? methodDefinition = null;
+            _ = metadataReader?.TryGetMetaData((int)methodDef, out methodDefinition);
+            List<string> paramNames = [];
+
+            if (methodDefinition.HasValue && metadataReader != null)
+            {
+                // Handle method Parameters Correctly
+                foreach (ParameterHandle mparam in methodDefinition.Value.GetParameters())
+                {
+                    Parameter? _param = metadataReader.GetDefinitionFromHandle<Parameter>(mparam);
+                    if (_param.HasValue)
+                    {
+                        string paramName = metadataReader.GetStringFromHandle(_param.Value.Name);
+                        if (!string.IsNullOrEmpty(paramName))
+                            paramNames.Insert(_param.Value.SequenceNumber - 1, paramName);
+                        else
+                            paramNames.Insert(_param.Value.SequenceNumber - 1, "<Unknown>");
+                    }
+                }
+            }
+            
             var methodParams = MethodSignatureParser.ParseSignature(method.Signature ?? string.Empty);
 
             WriteDword((uint)methodParams.Count);
 
             for (int i = 0; i < methodParams.Count; i++)
             {
-                WriteUTF16String(methodParams[i].paramName); // Send type name instead of method name...
+                WriteUTF16String(paramNames.ElementAtOrDefault(i) ?? methodParams[i].paramName); // Send type name instead of param name if the param name couldn't be gotten
                 WriteDword((uint)methodParams[i].cPlusTypeFlag);
                 WriteDword((uint)i + 1);
             }
@@ -1263,6 +1326,28 @@ namespace DotNetDataCollectorEx
                 return;
             }
 
+            ModuleMetadataReader? metadataReader = TryGetOrCreateModuleMetaDataReader(method.Type.Module);
+            MethodDefinition? methodDefinition = null;
+            _ = metadataReader?.TryGetMetaData(method.MetadataToken, out methodDefinition);
+            List<string> paramNames = [];
+
+            if (methodDefinition.HasValue && metadataReader != null)
+            {
+                // Handle method Parameters Correctly
+                foreach (ParameterHandle mparam in methodDefinition.Value.GetParameters())
+                {
+                    Parameter? _param = metadataReader.GetDefinitionFromHandle<Parameter>(mparam);
+                    if (_param.HasValue)
+                    {
+                        string paramName = metadataReader.GetStringFromHandle(_param.Value.Name);
+                        if (!string.IsNullOrEmpty(paramName))
+                            paramNames.Insert(_param.Value.SequenceNumber - 1, paramName);
+                        else
+                            paramNames.Insert(_param.Value.SequenceNumber - 1, "<Unknown>");
+                    }
+                }
+            }
+
             var methodParams = MethodSignatureParser.ParseSignature(method.Signature ?? string.Empty);
 
             WriteDword((uint)methodParams.Count);
@@ -1271,7 +1356,8 @@ namespace DotNetDataCollectorEx
 
             for (int i = 0; i < methodParams.Count; i++)
             {
-                WriteUTF16String(methodParams[i].paramName); // Send type name instead of method name...
+                WriteUTF16String(paramNames.ElementAtOrDefault(i) ?? string.Empty); // param name
+                WriteUTF16String(methodParams[i].paramName); // type name
                 WriteDword((uint)methodParams[i].cPlusTypeFlag);
                 WriteDword((uint)i + 1);
             }
@@ -1781,6 +1867,33 @@ namespace DotNetDataCollectorEx
                         {
                             state |= PipeServerState.AttachedEx;
                             ClrExtensions.ClearClrElementTypeCache(); // Clear the Type cache if we changed the process!
+                            foreach (ModuleMetadataReader moduleMetadata in moduleMetadataReaders.Values)
+                            {
+                                moduleMetadata.Dispose(); // Dispose of all old ModuleMetaDataReaders
+                            }
+                            moduleMetadataReaders.Clear(); // Clear ModuleMetaDataDictonaries
+                            moduleMetaDataReadersCreationFailed.Clear(); // Clear failed to create Modules
+
+                            foreach (ClrModule module in inspector.EnumerateModules())
+                            {
+                                if (module.IsDynamic)
+                                    continue;
+                                    
+                                try
+                                {
+                                    ModuleMetadataReader moduleMetadata = new(module);
+                                    moduleMetadataReaders.Add(module.Address, moduleMetadata);
+                                    Logger.LogInfo($"MetaDataReader created for Module: {Path.GetFileName(module.Name)}");
+                                }
+                                catch (Exception ex) 
+                                {
+                                    Logger.LogWarning($"Failed to create MetaDataReader for Module: {Path.GetFileName(module.Name)} Message: {ex.Message}");
+#if DEBUG
+                                    Logger.LogException(ex);
+#endif
+                                    moduleMetaDataReadersCreationFailed.Add(module.Address); // Add failed to parse modules for faster later check
+                                }
+                            }
                         }
                         else
                             Logger.LogWarning("Failed to attach to Process with DataCollectorEx");

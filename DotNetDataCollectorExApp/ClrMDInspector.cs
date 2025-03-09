@@ -10,8 +10,6 @@ namespace DotNetDataCollectorEx
         private DataTarget? _dataTarget;
         private ClrRuntime? _clrRuntime;
 
-        private ThreadSuspender? _threadSuspender;
-
         private int _processId;
 
         public ClrRuntime? ClrRuntime => _clrRuntime;
@@ -92,20 +90,8 @@ namespace DotNetDataCollectorEx
         {
             _dataTarget?.Dispose();
             _clrRuntime?.Dispose();
-            _threadSuspender?.Dispose();
             _dataTarget = null;
             _clrRuntime = null;
-            _threadSuspender = null;
-        }
-
-        public void SuspendProcess()
-        {
-            _threadSuspender ??= new ThreadSuspender(_processId);
-        }
-
-        public void ResumeProcess()
-        {
-            _threadSuspender?.Dispose();
         }
 
         public void SetChacheOptions(CacheOptions cacheOptions)
@@ -417,7 +403,6 @@ namespace DotNetDataCollectorEx
         {
             _dataTarget?.Dispose();
             _clrRuntime?.Dispose();
-            _threadSuspender?.Dispose();
         }
     }
 }

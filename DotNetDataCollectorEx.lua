@@ -1229,6 +1229,7 @@ function DotNetDataCollectorEx.GetMethodParameters(hMethod)
 
     for i=1,count do
         local t = {}
+        t.ParameterName = dotnetex_readString()
         t.ParameterTypeName = dotnetex_readString()
         t.ElementType = dotnetpipeex.readDword()
         t.Location = dotnetpipeex.readDword() -- The placement where the Parameter is inside the signature

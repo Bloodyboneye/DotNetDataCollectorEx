@@ -1,6 +1,7 @@
 ﻿using Microsoft.Diagnostics.Runtime;
 using System.Diagnostics;
 using System.IO.Pipes;
+using System.Reflection;
 using System.Runtime.InteropServices;
 using System.Text;
 
@@ -10,7 +11,7 @@ namespace DotNetDataCollectorEx
     {
         private const ushort PipeMajorVersion = 2; // Newer versions mean possibly breaking changes.
 
-        private const ushort PipeMinorVersion = 0; // Newer versions might be new functions for example, but no breaking changes to older Versions.
+        private const ushort PipeMinorVersion = 1; // Newer versions might be new functions for example, but no breaking changes to older Versions.
 
         private const uint PipeVersion = (uint)PipeMajorVersion << 16 | PipeMinorVersion;
 
@@ -84,6 +85,10 @@ namespace DotNetDataCollectorEx
             CMD_GETTHREAD = 43,
             CMD_FLUSHDACCACHE = 44,
             CMD_DUMPMODULE = 45,
+            CMD_METHODGETTYPE = 46,
+            CMD_FINDMETHOD = 47,
+            CMD_FINDMETHODBYDESC = 48,
+            CMD_FINDCLASS = 49,
         }
 
         [Flags]
@@ -308,6 +313,7 @@ namespace DotNetDataCollectorEx
             WriteQword(type.MethodTable);
             WriteDword((uint)type.ElementType);
             WriteDword((uint)type.TypeAttributes);
+            WriteBool(type.IsEnum);
             WriteUTF16String(type.Name ?? string.Empty);
             if (type.IsArray)
             {
@@ -327,8 +333,8 @@ namespace DotNetDataCollectorEx
                     WriteQword(componentType.MethodTable);
                     WriteUTF16String(componentType.Name ?? string.Empty);
                 }
-                ulong firstElementOffset = obj.HasValue ? type.GetArrayElementAddress(obj.Value.Address, 0) - obj.Value.Address : (uint)(nint.Size * 3); // Calculate offset to first element
-                uint countOffset = (uint)(nint.Size * 2);
+                ulong firstElementOffset = obj.HasValue ? type.GetArrayElementAddress(obj.Value.Address, 0) - obj.Value.Address : (uint)(nint.Size * 2); // Calculate offset to first element
+                uint countOffset = (uint)(nint.Size);
                 WriteDword(countOffset);
                 WriteDword((uint)type.ComponentSize); // element Size
                 WriteDword((uint)firstElementOffset);
@@ -344,11 +350,13 @@ namespace DotNetDataCollectorEx
             {
                 WriteDword((uint)iField.Token); // fieldToken
                 WriteDword((uint)iField.Size);
-                WriteDword((uint)iField.Offset); // fieldOffset
+                WriteDword((uint)iField.Offset + (uint)nint.Size); // fieldOffset / Add Pointer Size because of Method Table Pointer
                 WriteDword((uint)iField.ElementType); // fieldType
                 WriteDword((uint)iField.Attributes); // fieldAttributes
                 WriteUTF16String(iField.Name ?? string.Empty); // fieldName
                 WriteUTF16String(iField.Type?.Name ?? string.Empty); // className
+                WriteQword(iField.Type?.MethodTable ?? 0);
+                WriteBool(iField.Type?.IsEnum ?? false); // Is enum
                 WriteQword(obj.HasValue ? iField.GetAddress(obj.Value) : 0);
             }
 
@@ -363,6 +371,8 @@ namespace DotNetDataCollectorEx
                 WriteDword((uint)sField.Attributes); // fieldAttributes
                 WriteUTF16String(sField.Name ?? string.Empty); // fieldName
                 WriteUTF16String(sField.Type?.Name ?? string.Empty); // className
+                WriteQword(sField.Type?.MethodTable ?? 0);
+                WriteBool(sField.Type?.IsEnum ?? false); // Is enum
                 ClrAppDomain domain = sField.Type != null ? sField.Type.Module.AppDomain : type.Module.AppDomain;
                 WriteQword(sField.GetAddress(domain));
             }
@@ -732,7 +742,7 @@ namespace DotNetDataCollectorEx
                     WriteDword((uint)componentType.ElementType);
                 ulong firstElementOffset = objType.GetArrayElementAddress(obj.Address, 0) - obj.Address; // Calculate offset to first element
                 //ulong countOffset = firstElementOffset - 4; // Calculate Offset to count
-                ulong countOffset = (ulong)(nint.Size * 2);
+                ulong countOffset = (ulong)(nint.Size);
                 WriteDword((uint)countOffset);
                 WriteDword((uint)objType.ComponentSize); // element Size
                 WriteDword((uint)firstElementOffset);
@@ -747,8 +757,9 @@ namespace DotNetDataCollectorEx
 
             foreach (ClrField field in fields)
             {
+                uint offset = (uint)((field.Attributes & FieldAttributes.Static) == 0 ? nint.Size : 0);
                 WriteDword((uint)field.Token); // fieldToken
-                WriteDword((uint)field.Offset); // fieldOffset
+                WriteDword((uint)field.Offset + offset); // fieldOffset // Add offset to Instance Fields because of the Method Table Pointer
                 WriteDword((uint)field.ElementType); // fieldType
                 WriteDword((uint)field.Attributes); // fieldAttributes
                 WriteUTF16String(field.Name ?? string.Empty); // fieldName
@@ -767,9 +778,9 @@ namespace DotNetDataCollectorEx
                     WriteDword(uint.MaxValue);
                 else
                     WriteDword((uint)componentType.ElementType);
-                WriteDword((uint)(nint.Size * 2)); // countOffset
+                WriteDword((uint)(nint.Size)); // countOffset
                 WriteDword((uint)type.ComponentSize); // element Size
-                WriteDword((uint)(nint.Size * 3)); // firstElementOffset
+                WriteDword((uint)(nint.Size * 2)); // firstElementOffset
                 return;
             }
             // Handle non Array Types
@@ -781,8 +792,9 @@ namespace DotNetDataCollectorEx
 
             foreach (ClrField field in fields)
             {
+                uint offset = (uint)((field.Attributes & FieldAttributes.Static) == 0 ? nint.Size : 0);
                 WriteDword((uint)field.Token); // fieldToken
-                WriteDword((uint)field.Offset); // fieldOffset
+                WriteDword((uint)field.Offset + offset); // fieldOffset // Add offset to Instance Fields because of the Method Table Pointer
                 WriteDword((uint)field.ElementType); // fieldType
                 WriteDword((uint)field.Attributes); // fieldAttributes
                 WriteUTF16String(field.Name ?? string.Empty); // fieldName
@@ -1576,6 +1588,147 @@ namespace DotNetDataCollectorEx
             WriteUTF16String(error ?? string.Empty);
         }
 
+        private void MethodGetType()
+        {
+            ulong hMethod = ReadQword();
+
+            if (inspector.ClrRuntime == null)
+            {
+                WriteDword(uint.MaxValue);
+                return;
+            }
+            ClrMethod? method = inspector.GetMethod(hMethod);
+            if (method == null)
+            {
+                WriteDword(uint.MaxValue);
+                return;
+            }
+            SendType(method.Type);
+        }
+
+        private void FindMethod()
+        {
+            // Search for a method by its (optional) module, full Class name, methodname, (optional)method parameter count
+            ulong hModule = ReadQword();
+            string fullClassName = ReadUTF16String(); // namespace.classname
+            string methodName = ReadUTF16String();
+            uint paramCount = ReadDword();
+            bool caseSensitiveSearch = ReadBool();
+
+            if (inspector.ClrRuntime == null)
+            {
+                WriteDword(uint.MaxValue);
+                return;
+            }
+
+            ClrType[] types = inspector.GetModule(hModule) != null ? [.. inspector.EnumerateTypes(hModule)] : [.. inspector.EnumerateTypes()];
+            ClrType? foundType = null;
+
+            foreach (ClrType type in types)
+            {
+                if (type.Name?.Equals(fullClassName, caseSensitiveSearch ? StringComparison.Ordinal : StringComparison.OrdinalIgnoreCase) ?? false)
+                {
+                    foundType = type;
+                    break;
+                }
+            }
+
+            if (foundType == null)
+            {
+                WriteDword(uint.MaxValue);
+                return;
+            }
+            foreach (ClrMethod method in foundType.Methods)
+            {
+                if (method.Name?.Equals(methodName, caseSensitiveSearch ? StringComparison.Ordinal : StringComparison.OrdinalIgnoreCase) ?? false) 
+                {
+                    if (paramCount == uint.MaxValue || MethodSignatureParser.MethodSignatureGetParameters(method.Signature ?? string.Empty).Length == paramCount)
+                    {
+                        SendMethod(method);
+                        return;
+                    }
+                }
+            }
+            WriteDword(uint.MaxValue);
+        }
+
+        private void FindMethodByDesc()
+        {
+            ulong hModule = ReadQword();
+            string methodSignature = ReadUTF16String();
+            bool caseSensitiveSearch = ReadBool();
+
+            if (inspector.ClrRuntime == null)
+            {
+                WriteDword(uint.MaxValue);
+                return;
+            }
+
+            ClrType[] types = inspector.GetModule(hModule) != null ? [.. inspector.EnumerateTypes(hModule)] : [.. inspector.EnumerateTypes()];
+            ClrType? foundType = null;
+
+            string fullTypeName = MethodSignatureParser.MethodSignatureGetFullTypeName(methodSignature);
+            if (string.IsNullOrEmpty(fullTypeName))
+            {
+                WriteDword(uint.MaxValue);
+                return;
+            }
+
+            foreach (ClrType type in types)
+            {
+                if (type.Name?.Equals(fullTypeName, caseSensitiveSearch ? StringComparison.Ordinal : StringComparison.OrdinalIgnoreCase) ?? false)
+                {
+                    foundType = type;
+                    break;
+                }
+            }
+            if (foundType == null)
+            {
+                WriteDword(uint.MaxValue);
+                return;
+            }
+            foreach (ClrMethod method in foundType.Methods)
+            {
+                if (MethodSignatureParser.AreMethodSignaturesEqual(method.Signature ?? string.Empty, methodSignature, caseSensitiveSearch)) 
+                {
+                    SendMethod(method);
+                    return;
+                }
+            }
+            WriteDword(uint.MaxValue);
+        }
+
+        private void FindClass()
+        {
+            ulong hModule = ReadQword();
+            string fullClassName = ReadUTF16String();
+            bool caseSensitiveSearch = ReadBool();
+
+            if (inspector.ClrRuntime == null)
+            {
+                WriteDword(uint.MaxValue);
+                return;
+            }
+
+            if (string.IsNullOrEmpty(fullClassName))
+            {
+                WriteDword(uint.MaxValue);
+                return;
+            }
+
+            ClrType[] types = inspector.GetModule(hModule) != null ? [.. inspector.EnumerateTypes(hModule)] : [.. inspector.EnumerateTypes()];
+
+            foreach (ClrType type in types)
+            {
+                if (type.Name?.Equals(fullClassName, caseSensitiveSearch ? StringComparison.Ordinal : StringComparison.OrdinalIgnoreCase) ?? false)
+                {
+                    SendType(type);
+                    return;
+                }
+            }
+            WriteDword(uint.MaxValue);
+        }
+
         #endregion
 
         private void RunExLoopStub()
@@ -1823,6 +1976,18 @@ namespace DotNetDataCollectorEx
                         break;
                     case (byte)Commands.CMD_DUMPMODULE:
                         DumpModule();
+                        break;
+                    case (byte)Commands.CMD_METHODGETTYPE:
+                        MethodGetType();
+                        break;
+                    case (byte)Commands.CMD_FINDMETHOD:
+                        FindMethod();
+                        break;
+                    case (byte)Commands.CMD_FINDMETHODBYDESC:
+                        FindMethodByDesc();
+                        break;
+                    case (byte)Commands.CMD_FINDCLASS:
+                        FindClass();
                         break;
                     default:
                         Logger.LogWarning($"Invalid Command send over pipe: '{command}'");

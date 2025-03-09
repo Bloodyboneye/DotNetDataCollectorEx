@@ -4,6 +4,9 @@ DotNetDataCollectorEx.__index = DotNetDataCollectorEx
 dotnetpipeex = nil
 
 local pipeConnectionTimeOut = 3000
+local pipeReadTimeout = 10000
+local StructureDefaultArrayCount = 9
+local pointerSize = targetIs64Bit() and 8 or 4
 
 registerLuaFunctionHighlight("getDotNetDataCollectorEx")
 
@@ -48,6 +51,10 @@ DotNetDataCollectorExCommands = {
     CMD_GETTHREAD = 43,
     CMD_FLUSHDACCACHE = 44,
     CMD_DUMPMODULE = 45,
+    CMD_METHODGETTYPE = 46,
+    CMD_FINDMETHOD = 47,
+    CMD_FINDMETHODBYDESC = 48,
+    CMD_FINDCLASS = 49
 }
 
 ClrElementType = {
@@ -81,6 +88,33 @@ ClrElementType = {
     MVar = 0x1E
 }
 
+ClrTypeToVarTypeLookup = {}
+ClrTypeToVarTypeLookup[ClrElementType.Boolean] = vtByte
+ClrTypeToVarTypeLookup[ClrElementType.Char] = vtUnicodeString
+ClrTypeToVarTypeLookup[ClrElementType.Int8] = vtByte
+ClrTypeToVarTypeLookup[ClrElementType.UInt8] = vtByte
+ClrTypeToVarTypeLookup[ClrElementType.Int16] = vtWord
+ClrTypeToVarTypeLookup[ClrElementType.UInt16] = vtWord
+ClrTypeToVarTypeLookup[ClrElementType.Int32] = vtDword
+ClrTypeToVarTypeLookup[ClrElementType.UInt32] = vtDword
+ClrTypeToVarTypeLookup[ClrElementType.Int64] = vtQword
+ClrTypeToVarTypeLookup[ClrElementType.UInt64] = vtQword
+ClrTypeToVarTypeLookup[ClrElementType.Float] = vtSingle
+ClrTypeToVarTypeLookup[ClrElementType.Double] = vtDouble
+ClrTypeToVarTypeLookup[ClrElementType.String] = vtPointer
+ClrTypeToVarTypeLookup[ClrElementType.Pointer] = vtPointer
+ClrTypeToVarTypeLookup[ClrElementType.ByRef] = vtPointer
+--ClrTypeToVarTypeLookup[ClrElementType.Stuct] = ?
+ClrTypeToVarTypeLookup[ClrElementType.Class] = vtPointer
+ClrTypeToVarTypeLookup[ClrElementType.Var] = vtPointer -- ?
+ClrTypeToVarTypeLookup[ClrElementType.Array] = vtPointer
+--ClrTypeToVarTypeLookup[ClrElementType.GenericInstantiation] = ?
+ClrTypeToVarTypeLookup[ClrElementType.NativeInt] = vtPointer
+ClrTypeToVarTypeLookup[ClrElementType.NativeUInt] = vtPointer
+ClrTypeToVarTypeLookup[ClrElementType.FunctionPointer] = vtPointer
+ClrTypeToVarTypeLookup[ClrElementType.Object] = vtPointer
+ClrTypeToVarTypeLookup[ClrElementType.SZArray] = vtPointer
+--ClrTypeToVarTypeLookup[ClrElementType.MVar] = ?
 
 PipeServerState = {
     Loaded = 1 << 0,
@@ -105,6 +139,64 @@ local function dotnetex_writeString(str)
     local strbt = wideStringToByteTable(str)
     dotnetpipeex.writeDword(#strbt)
     dotnetpipeex.writeBytes(strbt)
+end
+
+local function dotnetex_I_splitSymbol(symbol)
+    local result = nil
+  
+    local parts = {}
+    local x
+    -- Split the symbol by '.' or ':' to get parts
+    for x in string.gmatch(symbol, "[^:.]+") do
+      table.insert(parts, x)
+    end
+  
+    local methodname = ''
+    local classname = ''
+    local namespace = ''
+  
+    if (#parts > 0) then
+      -- Check if the last part is a constructor and adjust method name
+      -- Check if the symbol ends with `.ctor` or `.cctor` to handle constructors
+      methodname = (symbol:find("[:.]%.cc?tor$") ~= nil and '.' or '') .. parts[#parts] -- methodname = parts[#parts]
+  
+      -- Assign classname if there is more than one part
+      if (#parts > 1) then
+        classname = parts[#parts - 1]
+  
+        -- If there are more than two parts, construct the namespace
+        if (#parts > 2) then
+          for x = 1, #parts - 2 do
+            if x == 1 then
+              namespace = parts[x]
+            else
+              namespace = namespace .. '.' .. parts[x]
+            end
+          end
+        end
+      end
+    end
+  
+    -- Return the result with methodname, classname, and namespace
+    result = {}
+    result.methodname = methodname
+    result.classname = classname
+    result.namespace = namespace
+  
+    return result
+end
+
+function dotnetex_ClrTypeToVarType(clrType)
+    local result = ClrTypeToVarTypeLookup[clrType]
+
+    if (result == nil) then
+        result = vtDword
+    end
+    return result
+end
+
+function dotnetex_ClrTypeIsSigned(clrType)
+    return clrType == ClrElementType.Int8 or clrType == ClrElementType.Int16 or clrType == ClrElementType.Int32 or clrType == ClrElementType.Int64
 end
 
 local function dotnetex_I_getRunningDotNetInfoEx()
@@ -242,6 +334,7 @@ local function dotnetex_I_readType()
     r.hType = dotnetpipeex.readQword() -- This is either A: The MethodTable or B: The TypeHandle if the Type doesn't have a MethodTable
     r.ElementType = dotnetpipeex.readDword() -- This is the types element type -> See ClrElementType
     r.TypeAttributes = dotnetpipeex.readDword() -- These are the types attributes -> See <System.Reflection.TypeAttributes>
+    r.IsEnum = dotnetpipeex.readByte() ~= 0
     r.Name = dotnetex_readString() -- Name of the Type
 
     if (r.ElementType == ClrElementType.Array or r.ElementType == ClrElementType.SZArray) then
@@ -277,6 +370,8 @@ local function dotnetex_I_readType()
         iField.Attributes = dotnetpipeex.readDword() -- The Attributes of the Field -> see <System.Reflection.FieldAttributes>
         iField.Name = dotnetex_readString() -- The Name of the Field
         iField.TypeName = dotnetex_readString() -- The Name of the Type of the Field
+        iField.hType = dotnetpipeex.readQword() -- The MethodTable or TypeHandle of the Fields Type
+        iField.TypeIsEnum = dotnetpipeex.readByte() ~= 0
         iField.Address = dotnetpipeex.readQword() -- The address of the field -> Will only be valid if this was called with a ClrObject and not ClrType
         iField.IsStatic = false
         instanceFields[#instanceFields+1] = iField
@@ -293,6 +388,8 @@ local function dotnetex_I_readType()
         sField.Attributes = dotnetpipeex.readDword() -- The Attributes of the Field -> see <System.Reflection.FieldAttributes>
         sField.Name = dotnetex_readString() -- The Name of the Field
         sField.TypeName = dotnetex_readString() -- The Name of the Type of the Field
+        sField.hType = dotnetpipeex.readQword() -- The MethodTable or TypeHandle of the Fields Type
+        sField.TypeIsEnum = dotnetpipeex.readByte() ~= 0
         sField.Address = dotnetpipeex.readQword() -- The address of the field
         sField.IsStatic = true
         staticFields[#staticFields+1] = sField
@@ -358,8 +455,248 @@ local function dotnetex_targetProcess(processid)
     return (result and result > 0)
 end
 
+local function dotnetex_I_getFQClassName(atype)
+    if (atype == nil or atype == 0 or atype.Name == nil) then return nil end
+    local fqClass = atype.Name:gsub("([^A-Za-z0-9%+%.,_$`<>%[%]])", "")
+    if (fqClass == nil or #fqClass == 0) then return nil end
+    return fqClass
+end
+
+local function dotnetex_I_exportArrayStruct(structure, atype, elementType, structmap, makeglobal, reload)
+    --print("dotnetex_I_exportArrayStruct")
+    if (structure ~= nil and atype~= nil and elementType ~= nil) then
+        --print("dotnetex_I_exportArrayStruct_2")
+        local elementStruct = dotnetex_exportStruct(elementType, nil, structmap, makeglobal, pointerSize)
+        if (elementStruct ~= nil and reload) then
+            --print("dotnetex_I_exportArrayStruct_3")
+            structure_beginUpdate(structure)
+            local ae = structure.addElement()
+            ae.Name = 'Count'
+            ae.Offset = atype.CountOffset
+            ae.VarType = vtDword
+            ae.setChildStruct(elementStruct)
+
+            local psize = atype.ComponentSize
+            local start = atype.FirstElementOffset
+
+            local arrayCount = StructureDefaultArrayCount or 9
+            for j = 0, arrayCount do
+                ae = structure.addElement()
+                ae.Name = string.format("[%d]%s", j, elementType.Name)
+                ae.Offset = j*psize+start
+                ae.VarType = dotnetex_ClrTypeToVarType(elementType.ElementType)
+                if (dotnetex_ClrTypeIsSigned(elementType.ElementType)) then
+                    ae.DisplayMethod = 'dtSignedInteger'
+                end
+            end
+            structure_endUpdate(structure)
+        end
+    end
+    return structure
+end
+
+local function dotnetex_I_exportStructure(structure, atype, structmap, makeglobal)
+    if (dotnetpipeex == nil or dotnetpipeex.pipeInfo == nil) then return nil end
+
+    if (not dotnetpipeex.isValid()) then return nil end
+
+    if (atype == 0 or atype == nil) then return nil end
+
+    --print(atype.Name)
+    if (atype.IsArray and atype.ComponentType and atype.ComponentType.hType) then
+        local elementType = DotNetDataCollectorEx.GetTypeDefData(atype.ComponentType.hType)
+        return dotnetex_I_exportArrayStruct(structure, atype, elementType, structmap, makeglobal, true)
+    end
+
+    if (atype.InstanceFields == nil) then return nil end
+
+    structure_beginUpdate(structure)
+
+    local fields = atype.InstanceFields
+
+    for i=1, #fields do
+        local e = structure.addElement()
+        local ft = fields[i].ElementType
+        local fieldname = fields[i].Name:gsub("([^A-Za-z0-9%+%.,_$`<>%[%]])", "")
+        if (fieldname ~= nil) then
+            e.Name = fieldname
+        end
+        e.Offset = fields[i].Offset
+        e.VarType = fields[i].TypeIsEnum and vtDword or dotnetex_ClrTypeToVarType(ft)
+        if (dotnetex_ClrTypeIsSigned(ft)) then
+            e.DisplayMethod = 'dtSignedInteger' -- make it signed if it is an integer
+        end
+
+        if (ft == ClrElementType.String or ft == ClrElementType.Char) then
+            e.ByteSize = 999
+        end
+    end
+    structure_endUpdate(structure)
+    return structure
+end
+
+function dotnetex_exportStruct(atype, typeName, structmap, makeglobal, reload)
+    local fqClass = dotnetex_I_getFQClassName(atype)
+    if (typeName == nil) then
+        typeName = fqClass
+    end
+    if (typeName == nil) then return nil end
+    local s = structmap[typeName]
+    if (s == nil) then
+        s = createStructure(typeName)
+        structmap[typeName] = s
+        if (makeglobal) then
+            structure_addToGlobalStructureList(s)
+        end
+    else
+        if (not reload) then
+            return s
+        end
+    end
+    makeglobal = false
+    return dotnetex_I_exportStructure(s, atype, structmap, makeglobal)
+end
+
+local function dotnetex_AddressLoopupCallback(address)
+    if (dotnetpipeex == nil or dotnetpipeex.pipeInfo == nil) then return nil end
+    if (debug_isBroken()) then return nil end -- Will timeout pipe without this
+
+    if (not dotnetpipeex.isValid()) then return nil end
+
+    if (dotnetpipeex.pipeInfo.RunningState & PipeServerState.RunningAsExtension == 0) then return nil end
+
+    local result = ''
+
+    local method = DotNetDataCollectorEx.GetMethodFromIP(address)
+
+    if (method and method.Signature and method.NativeCode and method.MethodRegions and method.MethodRegions[1] and method.MethodRegions[1].StartAddress and method.MethodRegions[1].Size) then
+        if (address < method.NativeCode) then
+            return nil -- For some reason GetMethodFromIP will also return methods that are not within the actual method range but maybe a sort of copy of the method??? Or does it return the wrong method?
+        end
+        
+        -- Handle the case in which the method lies outside of the "Hot" Region
+        if (address > method.MethodRegions[1].StartAddress + method.MethodRegions[1].Size) then return nil end -- Ignore if outside of Hot Region
+        --local class = DotNetDataCollectorEx.GetTypeFromMethod(method.hMethod)
+        local name = string.match(method.Signature, "^%s*([^%s%(]+)%s*%(")
+        if (name) then
+            name = name:match("%.cc?tor$") and name:gsub("%.%.(c?ctor)$", ":.%1") or name:gsub("(.*)%.", "%1:") -- Replace class.methodname with class:methodname
+            result = result..name
+        end
+        if (not name or #name == 0) then return nil end -- Ignore empty names
+
+        if (address ~= method.NativeCode) then
+            result = result..string.format("+%x",address - method.NativeCode)
+        end
+    end
+
+    return result
+end
+
+local function dotnetex_SymbolLookupCallback(symbol, recursive)
+    if (dotnetpipeex == nil or dotnetpipeex.pipeInfo == nil) then return nil end
+
+    if (not dotnetpipeex.isValid()) then return nil end
+
+    if symbol:match('[()%[%]]')~=nil then return nil end --no formulas/indexer
+    --print(symbol)
+
+    local ss=dotnetex_I_splitSymbol(symbol)
+    --print(ss.methodname)
+    --print(ss.classname)
+    --print(ss.namespace)
+
+    if (ss.methodname~='') and (ss.classname~='') then
+        local method=DotNetDataCollectorEx.FindMethod(nil, ss.namespace..'.'..ss.classname, ss.methodname)
+        if (method == nil or method.NativeCode == nil) then
+            if (recursive) then
+                return nil
+            end
+            DotNetDataCollectorEx.FlushDACCache() -- Flush Cache Because maybe the method hadn't been jitted when collecting info, but has now
+            return dotnetex_SymbolLookupCallback(symbol, true)
+        end
+
+        return method.NativeCode
+    end
+    return nil
+end
+
+local function dotnetex_StructureNameLookupCallback(address)
+    if (dotnetpipeex == nil or dotnetpipeex.pipeInfo == nil) then return nil end
+
+    if (not dotnetpipeex.isValid()) then return nil end
+
+    local data = DotNetDataCollectorEx.GetAddressData(address)
+
+    if (data ~= nil and data.StartAddress ~= nil and data.Type ~= nil) then
+        return data.Type.Name, data.StartAddress -- data.StartAddress points to the MethodTable Pointer
+    end
+    return nil
+end
+
+local function dotnetex_StructureDissectOverride(structure, baseAddress)
+    if (dotnetpipeex == nil or dotnetpipeex.pipeInfo == nil) then return nil end
+
+    if (not dotnetpipeex.isValid()) then return nil end
+
+    local addrData = DotNetDataCollectorEx.GetAddressData(baseAddress)
+
+    if (addrData ~= nil and addrData.Type) then
+        --print(addrData.Type.Name)
+        --printf("%X",addrData.StartAddress)
+        --printf("%X",baseAddress)
+        local smap = {}
+        local s
+        if(addrData.StartAddress == baseAddress) then
+            s = dotnetex_I_exportStructure(structure, addrData.Type, smap, false)
+        end
+        return s ~= nil
+    end
+    return nil
+end
+
+local function dotnetex_registerCallbacks(unregister)
+    if (not dotnetpipeex or not dotnetpipeex.pipeInfo) then return false end
+    if (dotnetpipeex.pipeInfo.RunningState & PipeServerState.RunningAsExtension ~= 0) then
+        if (unregister) then
+            if (dotnetpipeex.AddressLookupID ~= nil) then
+                unregisterAddressLookupCallback(dotnetpipeex.AddressLookupID)
+                dotnetpipeex.AddressLookupID = nil
+            end
+            if (dotnetpipeex.SymbolLookupID ~= nil) then
+                unregisterSymbolLookupCallback(dotnetpipeex.SymbolLookupID)
+                dotnetpipeex.SymbolLookupID = nil
+            end
+            if (dotnetpipeex.StructureNameLookupID ~= nil) then
+                unregisterStructureNameLookup(dotnetpipeex.StructureNameLookupID)
+                dotnetpipeex.StructureNameLookupID = nil
+            end
+            if (dotnetpipeex.StructureDissectOverrideID ~= nil) then
+                unregisterStructureDissectOverride(dotnetpipeex.StructureDissectOverrideID)
+                dotnetpipeex.StructureDissectOverrideID = nil
+            end
+            return true
+        end
+        -- Register callbacks if running as extension
+        if (dotnetpipeex.AddressLookupID == nil) then
+            dotnetpipeex.AddressLookupID = registerAddressLookupCallback(dotnetex_AddressLoopupCallback)
+        end
+        if (dotnetpipeex.SymbolLookupID == nil) then
+            dotnetpipeex.SymbolLookupID = registerSymbolLookupCallback(dotnetex_SymbolLookupCallback, slNotSymbol)
+        end
+        if (dotnetpipeex.StructureNameLookupID == nil) then
+            dotnetpipeex.StructureNameLookupID = registerStructureNameLookup(dotnetex_StructureNameLookupCallback)
+        end
+        if (dotnetpipeex.StructureDissectOverrideID == nil) then
+            dotnetpipeex.StructureDissectOverrideID = registerStructureDissectOverride(dotnetex_StructureDissectOverride)
+        end
+        return true
+    end
+    return false
+end
+
 local function dotnetex_closePipe()
     if (dotnetpipeex) then
+        dotnetex_registerCallbacks(true)
         dotnetpipeex.lock()
         dotnetpipeex.writeByte(commands.L_CMD_CLOSEPROCESSANDQUIT)
         dotnetpipeex.unlock()
@@ -416,7 +753,7 @@ local function dotnetex_initPipe(timeout, pipeInfo)
     end
     local targettk = getTickCount() + timeout
     while (targettk > getTickCount()) do
-        dotnetpipeex = connectToPipe(pipename, timeout)
+        dotnetpipeex = connectToPipe(pipename, pipeReadTimeout)
         if (dotnetpipeex) then break end
     end
     if (dotnetpipeex == nil) then
@@ -688,6 +1025,7 @@ end
 
 function DotNetDataCollectorEx.DataCollectorInfo()
     if (not dotnetpipeex.AttachedEx) then return nil end
+    if (not dotnetpipeex.isValid()) then return {} end
     local r = {}
     dotnetpipeex.lock()
     dotnetpipeex.writeByte(commands.CMD_DATACOLLECTORINFO)
@@ -704,6 +1042,7 @@ end
 
 function DotNetDataCollectorEx.EnumDomains()
     if (not dotnetpipeex.AttachedEx) then return nil end
+    if (not dotnetpipeex.isValid()) then return {} end
     local r = {}
     dotnetpipeex.lock()
     dotnetpipeex.writeByte(commands.CMD_ENUMDOMAINS)
@@ -723,6 +1062,7 @@ end
 
 function DotNetDataCollectorEx.EnumModules(hDomain) -- hDomain can be 0 or nil in which case it will get the modules in *ALL* Domains
     if (not dotnetpipeex.AttachedEx) then return nil end
+    if (not dotnetpipeex.isValid()) then return {} end
     local r = {}
     if (type(hDomain) ~= "number") then hDomain = 0 end
     dotnetpipeex.lock()
@@ -740,6 +1080,7 @@ end
 
 function DotNetDataCollectorEx.EnumTypeDefs(hModule) -- hModule can be 0 or nil in which case it will get *ALL* Types
     if (not dotnetpipeex.AttachedEx) then return nil end
+    if (not dotnetpipeex.isValid()) then return {} end
     local r = {}
     if (type(hModule) ~= "number") then hModule = 0 end
     dotnetpipeex.lock()
@@ -769,6 +1110,7 @@ end
 
 function DotNetDataCollectorEx.GetTypeDefMethods(hType)
     if (not dotnetpipeex.AttachedEx) then return nil end
+    if (not dotnetpipeex.isValid()) then return {} end
     local r = {}
 
     dotnetpipeex.lock()
@@ -789,6 +1131,7 @@ end
 
 function DotNetDataCollectorEx.GetTypeDefParent(hType)
     if (not dotnetpipeex.AttachedEx) then return nil end
+    if (not dotnetpipeex.isValid()) then return {} end
     local r = {}
 
     dotnetpipeex.lock()
@@ -805,6 +1148,7 @@ end
 
 function DotNetDataCollectorEx.GetAddressData(address)
     if (not dotnetpipeex.AttachedEx) then return nil end
+    if (not dotnetpipeex.isValid()) then return {} end
     local r = {}
 
     dotnetpipeex.lock()
@@ -827,6 +1171,7 @@ end
 
 function DotNetDataCollectorEx.EnumAllObjects()
     if (not dotnetpipeex.AttachedEx) then return nil end
+    if (not dotnetpipeex.isValid()) then return {} end
     local r = {}
 
     dotnetpipeex.lock()
@@ -853,6 +1198,7 @@ end
 
 function DotNetDataCollectorEx.GetTypeDefData(hType)
     if (not dotnetpipeex.AttachedEx) then return nil end
+    if (not dotnetpipeex.isValid()) then return {} end
 
     dotnetpipeex.lock()
     dotnetpipeex.writeByte(commands.CMD_GETTYPEDEFFIELDS)
@@ -866,6 +1212,7 @@ end
 
 function DotNetDataCollectorEx.GetMethodParameters(hMethod)
     if (not dotnetpipeex.AttachedEx) then return nil end
+    if (not dotnetpipeex.isValid()) then return {} end
     local r = {}
 
     dotnetpipeex.lock()
@@ -894,6 +1241,7 @@ end
 
 function DotNetDataCollectorEx.EnumAllObjectsOfType(hType)
     if (not dotnetpipeex.AttachedEx) then return nil end
+    if (not dotnetpipeex.isValid()) then return {} end
     local r = {}
 
     dotnetpipeex.lock()
@@ -930,6 +1278,7 @@ end
 
 function DotNetDataCollectorEx.GetTypeInfo(hType)
     if (not dotnetpipeex.AttachedEx) then return nil end
+    if (not dotnetpipeex.isValid()) then return {} end
 
     dotnetpipeex.lock()
     dotnetpipeex.writeByte(commands.CMD_GETTYPEINFO)
@@ -943,6 +1292,7 @@ end
 
 function DotNetDataCollectorEx.GetBaseClassModule() -- Returns the Module of the BaseClassLibrary
     if (not dotnetpipeex.AttachedEx) then return nil end
+    if (not dotnetpipeex.isValid()) then return {} end
 
     dotnetpipeex.lock()
     dotnetpipeex.writeByte(commands.CMD_GETBASECLASSMODULE)
@@ -955,6 +1305,7 @@ end
 
 function DotNetDataCollectorEx.GetAppDomainInfo(hDomain)
     if (not dotnetpipeex.AttachedEx) then return nil end
+    if (not dotnetpipeex.isValid()) then return {} end
     local r = {}
 
     dotnetpipeex.lock()
@@ -977,6 +1328,7 @@ end
 
 function DotNetDataCollectorEx.EnumGCHandes() -- Returns all GC Handles + Info
     if (not dotnetpipeex.AttachedEx) then return nil end
+    if (not dotnetpipeex.isValid()) then return {} end
     local r = {}
 
     dotnetpipeex.lock()
@@ -1012,6 +1364,7 @@ end
 
 function DotNetDataCollectorEx.GetMethodInfo(hMethod)
     if (not dotnetpipeex.AttachedEx) then return nil end
+    if (not dotnetpipeex.isValid()) then return {} end
 
     dotnetpipeex.lock()
     dotnetpipeex.writeByte(commands.CMD_GETMETHODINFO)
@@ -1025,6 +1378,7 @@ end
 
 function DotNetDataCollectorEx.GetMethodFromIP(ip)
     if (not dotnetpipeex.AttachedEx) then return nil end
+    if (not dotnetpipeex.isValid()) then return {} end
 
     dotnetpipeex.lock()
     dotnetpipeex.writeByte(commands.CMD_GETMETHODBYIP)
@@ -1040,6 +1394,7 @@ function DotNetDataCollectorEx.GetTypeFromElementType(elementType, specialType)
     -- elementType: see ClrElementType
     -- specialType: 1->Heap.FreeType | 2-> ExceptionType -Either option is optional -> though special type gets prioritized
     if (not dotnetpipeex.AttachedEx) then return nil end
+    if (not dotnetpipeex.isValid()) then return {} end
 
     if (type(specialType) ~= "number") then specialType = 0 end
     if (type(elementType) ~= "number") then elementType = 0 end
@@ -1057,6 +1412,7 @@ end
 
 function DotNetDataCollectorEx.GetCLRInfo()
     if (not dotnetpipeex.AttachedEx) then return nil end
+    if (not dotnetpipeex.isValid()) then return {} end
     local r = {}
 
     dotnetpipeex.lock()
@@ -1081,6 +1437,7 @@ end
 
 function DotNetDataCollectorEx.EnumThreads()
     if (not dotnetpipeex.AttachedEx) then return nil end
+    if (not dotnetpipeex.isValid()) then return {} end
     local r = {}
 
     dotnetpipeex.lock()
@@ -1113,6 +1470,7 @@ end
 
 function DotNetDataCollectorEx.TraceStack(threadid) -- Thread ID can either be the native/os or managed id. It will check for the native/os id first though
     if (not dotnetpipeex.AttachedEx) then return nil end
+    if (not dotnetpipeex.isValid()) then return {} end
     local r = {}
 
     dotnetpipeex.lock()
@@ -1148,6 +1506,7 @@ end
 
 function DotNetDataCollectorEx.GetThreadFromID(threadid) -- Returns info about the managed thread given its native/os or managed id
     if (not dotnetpipeex.AttachedEx) then return nil end
+    if (not dotnetpipeex.isValid()) then return {} end
     local r = {}
 
     dotnetpipeex.lock()
@@ -1177,6 +1536,7 @@ end
 
 function DotNetDataCollectorEx.FlushDACCache() -- Flushes the DAC Cache
     if (not dotnetpipeex.AttachedEx) then return nil end
+    if (not dotnetpipeex.isValid()) then return nil end
 
     dotnetpipeex.lock()
     dotnetpipeex.writeByte(commands.CMD_FLUSHDACCACHE)
@@ -1185,6 +1545,7 @@ end
 
 function DotNetDataCollectorEx.DumpModule(hModule, outputFilePath)
     if (not dotnetpipeex.AttachedEx) then return "No DotNetDataCollectorEx running" end
+    if (not dotnetpipeex.isValid()) then return "DotNetDataCollectorEx is attached to wrong process" end
     
     dotnetpipeex.lock()
     dotnetpipeex.writeByte(commands.CMD_DUMPMODULE)
@@ -1200,11 +1561,84 @@ end
 
 function DotNetDataCollectorEx.DumpModuleEx(module, outputPath)
     if (not dotnetpipeex.AttachedEx) then return "No DotNetDataCollectorEx running" end
+    if (not dotnetpipeex.isValid()) then return "DotNetDataCollectorEx is attached to wrong process" end
     if (type(outputPath) ~= "string") then outputPath = getTempFolder() end
     
     outputPath = outputPath:match("\\$") and outputPath or outputPath .. "\\"
     local fileName = "DUMP_" .. (module.Name ~= "" and extractFileName(module.Name) or ("UNKNOWNNAME_" .. module.hModule))
     return DotNetDataCollectorEx.DumpModule(module.hModule, outputPath .. fileName)
+end
+
+function DotNetDataCollectorEx.GetTypeFromMethod(hMethod)
+    if (not dotnetpipeex.AttachedEx) then return nil end
+    if (not dotnetpipeex.isValid()) then return {} end
+
+    dotnetpipeex.lock()
+    dotnetpipeex.writeByte(commands.CMD_METHODGETTYPE)
+    dotnetpipeex.writeQword(hMethod)
+
+    local r = dotnetex_I_readType()
+
+    dotnetpipeex.unlock()
+    return r
+end
+
+function DotNetDataCollectorEx.FindMethod(hModule, fullClassName, methodName, paramCount, caseSensitive)
+    if (not dotnetpipeex.AttachedEx) then return nil end
+    if (not dotnetpipeex.isValid()) then return {} end
+
+    if (type(hModule) ~= "number") then hModule = 0 end
+    if (type(paramCount) ~= "number") then paramCount = -1 end
+
+    dotnetpipeex.lock()
+    dotnetpipeex.writeByte(commands.CMD_FINDMETHOD)
+    dotnetpipeex.writeQword(hModule)
+    dotnetex_writeString(fullClassName)
+    dotnetex_writeString(methodName)
+    dotnetpipeex.writeDword(paramCount)
+    dotnetpipeex.writeByte(caseSensitive and 1 or 0)
+
+    local r = dotnetex_I_readMethod()
+
+    dotnetpipeex.unlock()
+    return r
+end
+
+function DotNetDataCollectorEx.FindMethodByDesc(hModule, methodSignature, caseSensitive)
+    if (not dotnetpipeex.AttachedEx) then return nil end
+    if (not dotnetpipeex.isValid()) then return {} end
+
+    if (type(hModule) ~= "number") then hModule = 0 end
+    if (type(paramCount) ~= "number") then paramCount = -1 end
+
+    dotnetpipeex.lock()
+    dotnetpipeex.writeByte(commands.CMD_FINDMETHODBYDESC)
+    dotnetpipeex.writeQword(hModule)
+    dotnetex_writeString(methodSignature)
+    dotnetpipeex.writeByte(caseSensitive and 1 or 0)
+
+    local r = dotnetex_I_readMethod()
+
+    dotnetpipeex.unlock()
+    return r
+end
+
+function DotNetDataCollectorEx.FindClass(hModule, fullClassName, caseSensitive)
+    if (not dotnetpipeex.AttachedEx) then return nil end
+    if (not dotnetpipeex.isValid()) then return {} end
+
+    if (type(hModule) ~= "number") then hModule = 0 end
+
+    dotnetpipeex.lock()
+    dotnetpipeex.writeByte(commands.CMD_FINDCLASS)
+    dotnetpipeex.writeQword(hModule)
+    dotnetex_writeString(fullClassName)
+    dotnetpipeex.writeByte(caseSensitive and 1 or 0)
+
+    local r = dotnetex_I_readType()
+
+    dotnetpipeex.unlock()
+    return r
 end
 
 function DotNetDataCollectorEx.ReplaceLegacyDataCollector(restore) -- Will replace the getDotNetDataCollector() function with a new one - if restore is set then it will restore the function instead
@@ -1259,6 +1693,10 @@ function DotNetDataCollectorEx.ReplaceLegacyDataCollector(restore) -- Will repla
     l_datacollector.Attached = true
     getDotNetDataCollector = function () return l_datacollector end
     return true
+end
+
+function DotNetDataCollectorEx.RegisterCallbacks(unregister)
+    return dotnetex_registerCallbacks(unregister)
 end
 
 local function LaunchDotNetDataCollectorEx()

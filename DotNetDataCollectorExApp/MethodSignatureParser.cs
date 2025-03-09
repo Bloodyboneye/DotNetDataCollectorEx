@@ -1,4 +1,5 @@
 ﻿using Microsoft.Diagnostics.Runtime;
+using System.Text;
 
 namespace DotNetDataCollectorEx
 {
@@ -124,6 +125,68 @@ namespace DotNetDataCollectorEx
             }
 
             return parameters;
+        }
+
+        public static string MethodSignatureGetFullTypeName(string methodSignature)
+        {
+            if (string.IsNullOrEmpty(methodSignature))
+                return "";
+
+            int lastParenIndex = methodSignature.IndexOf('(');
+            if (lastParenIndex == -1)
+                lastParenIndex = methodSignature.Length;
+
+            int lastSeparatorIndex = methodSignature.LastIndexOfAny(['.', ':'], lastParenIndex - 1);
+
+            if (lastSeparatorIndex == -1)
+                return "";
+
+            return methodSignature[..lastSeparatorIndex];
+        }
+
+        public static bool AreMethodSignaturesEqual(string signature1, string signature2, bool caseSensitive)
+        {
+            if (string.IsNullOrEmpty(signature1) || string.IsNullOrEmpty(signature2))
+                return false;
+
+            return signature1.Equals(signature2, caseSensitive ? StringComparison.Ordinal : StringComparison.OrdinalIgnoreCase) || (caseSensitive
+                ? NormalizeMethodSignature(signature1).Equals(NormalizeMethodSignature(signature2))
+                : NormalizeMethodSignature(signature1).Equals(NormalizeMethodSignature(signature2), StringComparison.OrdinalIgnoreCase));
+        }
+
+        private static string NormalizeMethodSignature(string signature)
+        {
+            signature = signature.Trim();
+
+            // Replace colons with dots for consistency
+            signature = signature.Replace(":", ".");
+
+            // Manually remove spaces around commas and parentheses
+            StringBuilder normalizedSignature = new();
+            bool insideParenthesis = false;
+
+            for (int i = 0; i < signature.Length; i++)
+            {
+                char currentChar = signature[i];
+
+                // Detect and handle parentheses to determine when we're inside them
+                if (currentChar == '(')
+                {
+                    insideParenthesis = true;
+                }
+                else if (currentChar == ')')
+                {
+                    insideParenthesis = false;
+                }
+
+                // Skip spaces if we're not inside parentheses or if it's not between commas/parentheses
+                if (currentChar != ' ' || insideParenthesis || (i > 0 && signature[i - 1] == ',' && currentChar == ' '))
+                {
+                    normalizedSignature.Append(currentChar);
+                }
+            }
+
+            return normalizedSignature.ToString();
         }
     }
 }

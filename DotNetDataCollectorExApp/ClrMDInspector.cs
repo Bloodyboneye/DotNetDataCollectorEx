@@ -184,6 +184,13 @@ namespace DotNetDataCollectorEx
             }
         }
 
+        public ClrModule? GetModule(ulong hModule)
+        {
+            EnsureClrRuntimeInitializedOrThrow();
+
+            return EnumerateModules().FirstOrDefault(m => m.Address == hModule);
+        }
+
         public ClrType? GetType(ulong methodTable)
         {
             EnsureClrRuntimeInitializedOrThrow();

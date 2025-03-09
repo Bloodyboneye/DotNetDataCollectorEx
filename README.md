@@ -86,6 +86,7 @@ end
 If you want to debug **.NET 8+** applications in **Extension Mode**, then it is **recommended** to call `ReplaceLegacyDataCollector` to replace the legacy collector, as the legacy version does not support **.NET 8+**. This is important because other **Cheat Engine** functionality that relies on **DotNetDataCollector** will only work with **.NET 8+** if you use the new version. These include but are not limited to:
 - The `.net Info` Window
 - `dotnetinterface.lua` used for example for Jitting methods.
+  
 If you also want Cheat Engines **Symbol Handler** and **Data Disector** to work again also call `RegisterCallbacks`
 
 ---

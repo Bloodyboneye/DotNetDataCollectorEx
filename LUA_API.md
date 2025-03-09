@@ -16,6 +16,7 @@ local collectorEx = getDotNetDataCollectorEx()
 
 ### `legacy_enumDomains()`
 **Description**
+
 Does the same as **Cheat Engine's** `DotNetDataCollector` `enumDomains()`
 
 **Parameters:**
@@ -36,6 +37,7 @@ end
 
 ### `legacy_enumModuleList(domainHandle)`
 **Description**
+
 Does the same as **Cheat Engine's** `DotNetDataCollector` `enumModuleList(domainHandle)`
 
 **Parameters:**
@@ -45,7 +47,7 @@ Does the same as **Cheat Engine's** `DotNetDataCollector` `enumModuleList(domain
 - A table containing information about all modules in the domain
   - `ModuleHandle` (number): The Module Handle
   - `BaseAddress` (number): The Base Address of the Module (Game.exe)
-  - `Name` (string): The Name of the Domain
+  - `Name` (string): The Name of the Module
 
 **Usage:**
 ```lua
@@ -57,6 +59,7 @@ end
 
 ### `legacy_enumTypeDefs(ModuleHandle)`
 **Description**
+
 Does the same as **Cheat Engine's** `DotNetDataCollector` `enumTypeDefs(ModuleHandle)`
 
 **Parameters:**
@@ -64,10 +67,10 @@ Does the same as **Cheat Engine's** `DotNetDataCollector` `enumTypeDefs(ModuleHa
 
 **Returns:**
 - A table containing information about all types in the module
-  - `TypeDefToken` (number): The Token of the type
+  - `TypeDefToken` (number): The Token of the Type
   - `Flags` (number): The flags of the Type
   - `Extends` (number): The Token of the Parent class if there is one
-  - `Name` (string): The Name of the Domain
+  - `Name` (string): The Name of the Type
 
 **Usage:**
 ```lua
@@ -79,6 +82,7 @@ end
 
 ### `legacy_getTypeDefMethods(ModuleHandle, TypeDefToken)`
 **Description**
+
 Does the same as **Cheat Engine's** `DotNetDataCollector` `getTypeDefMethods(ModuleHandle, TypeDefToken)`
 
 **Parameters:**
@@ -90,7 +94,7 @@ Does the same as **Cheat Engine's** `DotNetDataCollector` `getTypeDefMethods(Mod
   - `MethodToken` (number): The Token of the method
   - `Attributes` (number): The attributes of the method
   - `ImplementationFlags` (number): The implementation flags of the method
-  - `Name` (string): The Name of the Domain
+  - `Name` (string): The Name of the Method
   - `ILCode` (number): The address of where the ILCode of the method resides
   - `NativeCode` (number) The address of where the compiled code of the method resides if it has been compiled
   - `SecondaryNativeCode` (table) A table containing the addresses of all code blocks usually only 1 but could be 2
@@ -105,6 +109,7 @@ end
 
 ### `legacy_getAddressData(address)`
 **Description**
+
 Does the same as **Cheat Engine's** `DotNetDataCollector` `getAddressData(address)`
 
 **Parameters:**
@@ -136,6 +141,7 @@ print("Class Name:" .. obj.ClassName)
 
 ### `legacy_enumAllObjects()`
 **Description**
+
 Does the same as **Cheat Engine's** `DotNetDataCollector` `enumAllObjects()`
 
 **Parameters:**
@@ -144,7 +150,7 @@ Does the same as **Cheat Engine's** `DotNetDataCollector` `enumAllObjects()`
 **Returns:**
 - A table containing Information about all the allocated objects
   - `TypeID` (table):
-    - `token1` (number):
+    - `token1` (number): Seems to be the MethodTable/TypeHandle
     - `token2` (number):
   - `StartAddress` (number): The Start Address of the Object
   - `Size` (number): The size of the object
@@ -161,6 +167,7 @@ end
 
 ### `legacy_getTypeDefData(ModuleHandle, TypeDefToken)`
 **Description**
+
 Does the same as **Cheat Engine's** `DotNetDataCollector` `getTypeDefData(ModuleHandle, TypeDefToken)`
 
 **Parameters:**
@@ -192,6 +199,7 @@ print("Class Name:" .. typeinfo.ClassName)
 
 ### `legacy_getMethodParameters(ModuleHandle, MethodDefToken)`
 **Description**
+
 Does the same as **Cheat Engine's** `DotNetDataCollector` `legacy_getMethodParameters(ModuleHandle, MethodDefToken)`
 
 **Parameters:**
@@ -214,6 +222,7 @@ end
 
 ### `legacy_getTypeDefParent(ModuleHandle, TypeDefToken)`
 **Description**
+
 Does the same as **Cheat Engine's** `DotNetDataCollector` `getTypeDefParent(ModuleHandle, TypeDefToken)`
 
 **Parameters:**
@@ -233,6 +242,7 @@ print("Parent Token:" .. typeinfo.TypedefToken)
 
 ### `legacy_enumAllObjectsOfType(ModuleHandle, TypeDefToken)`
 **Description**
+
 Does the same as **Cheat Engine's** `DotNetDataCollector` `enumAllObjectsOfType(ModuleHandle, TypeDefToken)`
 
 **Parameters:**
@@ -257,6 +267,7 @@ All of the below functions return nil if the **DotNetDataCollectorEx** is not ru
 
 ### `DataCollectorInfo()`
 **Description**
+
 Returns information about the **DataCollectorEx**
 
 **Parameters:**
@@ -278,6 +289,7 @@ print("Pipe Name is " .. info.PipeName)
 
 ### `EnumDomains()`
 **Description**
+
 Returns a table that contains all of the loaded App Domains
 
 **Parameters:**
@@ -286,7 +298,7 @@ Returns a table that contains all of the loaded App Domains
 **Returns:**
 - A table containing information about all of the loaded App Domains
   - `hDomain` (number): The handle/address of the AppDomain
-  - `Id ` (number): The Id of the AppDomain
+  - `Id` (number): The Id of the AppDomain
   - `Name` (string): The name of the AppDomain
 
 **Usage:**
@@ -299,6 +311,7 @@ end
 
 ### `EnumModules(hDomain)`
 **Description**
+
 Returns a table that contains all of the loaded modules
 
 **Parameters:**
@@ -328,6 +341,7 @@ end
 
 ### `EnumTypeDefs(hModule)`
 **Description**
+
 Returns a table that contains all of the loaded modules
 
 **Parameters:**
@@ -357,6 +371,7 @@ end
 
 ### `GetTypeDefMethods(hType)`
 **Description**
+
 Returns a table that contains all of the methods inside the type
 
 **Parameters:**
@@ -369,7 +384,7 @@ Returns a table that contains all of the methods inside the type
   - `Name` (string): The name of the Method
   - `Attributes` (number): The attributes of the Method
   - `NativeCode` (number): The address of where the compiled code of the method is located. Or 0 if it hasn't been compiled yet
-  - `Signature` (string): The Signature of the method -> namespace.class:methodname(...)
+  - `Signature` (string): The Signature of the method -> namespace.class.methodname(...)
   - `ILAddress` (number): The address of where the methods IL Code is located
   - `ILSize` (number): The size of the methods IL Code
   - `ILFlags` (number): The Flags of the methods IL
@@ -387,6 +402,7 @@ end
 
 ### `GetTypeDefParent(hType)`
 **Description**
+
 Returns a table containing information about the parent type
 
 **Parameters:**
@@ -406,6 +422,7 @@ print("Parent Type Name is " .. parentType.Name)
 
 ### `GetAddressData(address)`
 **Description**
+
 Returns a table that contains information about the Object if the address is inside an Object
 
 **Parameters:**
@@ -421,6 +438,7 @@ Returns a table that contains information about the Object if the address is ins
     - `ElementType` (number): The Element Type of the type
     - `Name` (string): The name of the Type
     - `IsArray` (boolean): True if the type is an array type
+    - `IsEnum` (boolean): True if the type if an enum else false
     - `ComponentType` (table): Information about the component type int[] -> int. (**Only valid if the Type is an array type!**)
       - `ElementType` (number): The element type of the component type.
       - `TypeToken` (number): The token of the component type
@@ -432,6 +450,8 @@ Returns a table that contains information about the Object if the address is ins
     **Below fields are only valid if the Type is NOT an array type!**
     - `InstanceFields` (table): Table containing all of the `instance` Fields
       - `TypeToken` (number): Token of the type of the field
+      - `hType` (number): The MethodTable/TypeHandle of the fields Type
+      - `TypeIsEnum` (boolean): True if the fields type is an enum else false
       - `Size` (number): The size of the field
       - `Offset` (number): The offset of the field inside an Object
       - `ElementType` (number): The element type of the type
@@ -442,6 +462,8 @@ Returns a table that contains information about the Object if the address is ins
       - `IsStatic` (boolean): Will always be false for instance fields
     - `StaticFields` (table): Table containing all of the `static` Fields
       - `TypeToken` (number): Token of the type of the field
+      - `hType` (number): The MethodTable/TypeHandle of the fields Type
+      - `TypeIsEnum` (boolean): True if the fields type is an enum else false
       - `Size` (number): The size of the field
       - `Offset` (number): The offset of the field taken from the StaticFieldBaseAddress
       - `ElementType` (number): The element type of the type
@@ -461,6 +483,7 @@ print("Start Address is " .. addrData.StartAddress)
 
 ### `EnumAllObjects()`
 **Description**
+
 Returns a table that contains information about all of the allocated Objects
 
 **Parameters:**
@@ -476,6 +499,7 @@ Returns a table that contains information about all of the allocated Objects
     - `ElementType` (number): The Element Type of the type
     - `Name` (string): The name of the Type
     - `IsArray` (boolean): True if the type is an array type
+    - `IsEnum` (boolean): True if the type if an enum else false
     - `ComponentType` (table): Information about the component type int[] -> int. (**Only valid if the Type is an array type!**)
       - `ElementType` (number): The element type of the component type.
       - `TypeToken` (number): The token of the component type
@@ -487,6 +511,8 @@ Returns a table that contains information about all of the allocated Objects
     **Below fields are only valid if the Type is NOT an array type!**
     - `InstanceFields` (table): Table containing all of the `instance` Fields
       - `TypeToken` (number): Token of the type of the field
+      - `hType` (number): The MethodTable/TypeHandle of the fields Type
+      - `TypeIsEnum` (boolean): True if the fields type is an enum else false
       - `Size` (number): The size of the field
       - `Offset` (number): The offset of the field inside an Object
       - `ElementType` (number): The element type of the type
@@ -497,6 +523,8 @@ Returns a table that contains information about all of the allocated Objects
       - `IsStatic` (boolean): Will always be false for instance fields
     - `StaticFields` (table): Table containing all of the `static` Fields
       - `TypeToken` (number): Token of the type of the field
+      - `hType` (number): The MethodTable/TypeHandle of the fields Type
+      - `TypeIsEnum` (boolean): True if the fields type is an enum else false
       - `Size` (number): The size of the field
       - `Offset` (number): The offset of the field taken from the StaticFieldBaseAddress
       - `ElementType` (number): The element type of the type
@@ -518,6 +546,7 @@ end
 
 ### `GetTypeDefData(hType)`
 **Description**
+
 Returns a table that contains information about the type
 
 **Parameters:**
@@ -530,6 +559,7 @@ Returns a table that contains information about the type
   - `ElementType` (number): The Element Type of the type
   - `Name` (string): The name of the Type
   - `IsArray` (boolean): True if the type is an array type
+  - `IsEnum` (boolean): True if the type if an enum else false
   - `ComponentType` (table): Information about the component type int[] -> int. (**Only valid if the Type is an array type!**)
     - `ElementType` (number): The element type of the component type.
     - `TypeToken` (number): The token of the component type
@@ -541,6 +571,8 @@ Returns a table that contains information about the type
   **Below fields are only valid if the Type is NOT an array type!**
   - `InstanceFields` (table): Table containing all of the `instance` Fields
     - `TypeToken` (number): Token of the type of the field
+    - `hType` (number): The MethodTable/TypeHandle of the fields Type
+    - `TypeIsEnum` (boolean): True if the fields type is an enum else false
     - `Size` (number): The size of the field
     - `Offset` (number): The offset of the field inside an Object
     - `ElementType` (number): The element type of the type
@@ -551,6 +583,8 @@ Returns a table that contains information about the type
     - `IsStatic` (boolean): Will always be false for instance fields
   - `StaticFields` (table): Table containing all of the `static` Fields
     - `TypeToken` (number): Token of the type of the field
+    - `hType` (number): The MethodTable/TypeHandle of the fields Type
+    - `TypeIsEnum` (boolean): True if the fields type is an enum else false
     - `Size` (number): The size of the field
     - `Offset` (number): The offset of the field taken from the StaticFieldBaseAddress
     - `ElementType` (number): The element type of the type
@@ -570,6 +604,7 @@ print("Type Name is " .. typeData.Name)
 
 ### `GetMethodParameters(hMethod)`
 **Description**
+
 Returns a table containing information about the methods parameters
 
 **Parameters:**
@@ -593,6 +628,7 @@ end
 
 ### `EnumAllObjectsOfType(hType)`
 **Description**
+
 Returns a table containing information about all of the allocated objects of the type
 
 **Parameters:**
@@ -613,7 +649,8 @@ end
 
 ### `GetTypeInfo(hType)` 
 **Description**
-Returns a table that contains information about the type | Obsolete as it does the same as `GetTypeDefData(hType)`
+
+Returns a table that contains information about the type | Does the same as `GetTypeDefData(hType)`
 
 **Parameters:**
 - `hType` (number): The MethodTable/TypeHandle of the type
@@ -625,6 +662,7 @@ Returns a table that contains information about the type | Obsolete as it does t
   - `ElementType` (number): The Element Type of the type
   - `Name` (string): The name of the Type
   - `IsArray` (boolean): True if the type is an array type
+  - `IsEnum` (boolean): True if the type if an enum else false
   - `ComponentType` (table): Information about the component type int[] -> int. (**Only valid if the Type is an array type!**)
     - `ElementType` (number): The element type of the component type.
     - `TypeToken` (number): The token of the component type
@@ -636,6 +674,8 @@ Returns a table that contains information about the type | Obsolete as it does t
   **Below fields are only valid if the Type is NOT an array type!**
   - `InstanceFields` (table): Table containing all of the `instance` Fields
     - `TypeToken` (number): Token of the type of the field
+    - `hType` (number): The MethodTable/TypeHandle of the fields Type
+    - `TypeIsEnum` (boolean): True if the fields type is an enum else false
     - `Size` (number): The size of the field
     - `Offset` (number): The offset of the field inside an Object
     - `ElementType` (number): The element type of the type
@@ -646,6 +686,8 @@ Returns a table that contains information about the type | Obsolete as it does t
     - `IsStatic` (boolean): Will always be false for instance fields
   - `StaticFields` (table): Table containing all of the `static` Fields
     - `TypeToken` (number): Token of the type of the field
+    - `hType` (number): The MethodTable/TypeHandle of the fields Type
+    - `TypeIsEnum` (boolean): True if the fields type is an enum else false
     - `Size` (number): The size of the field
     - `Offset` (number): The offset of the field taken from the StaticFieldBaseAddress
     - `ElementType` (number): The element type of the type
@@ -665,6 +707,7 @@ print("Type Name is " .. typeData.Name)
 
 ### `GetBaseClassModule()`
 **Description**
+
 Returns a table that contains information about the Base Class Module ex: mscorlib.dll
 
 **Parameters:**
@@ -692,6 +735,7 @@ print("Module Name is " .. basemodule.Name)
 
 ### `GetAppDomainInfo(hDomain)`
 **Description**
+
 Returns a table that contains information about the AppDomain
 
 **Parameters:**
@@ -714,6 +758,7 @@ print("AppDomain Name is " .. appdomainInfo.Name)
 
 ### `EnumGCHandes()`
 **Description**
+
 Returns a table that contains all of the allocated GC handles
 
 **Parameters:**
@@ -735,7 +780,7 @@ Returns a table that contains all of the allocated GC handles
   - `DependentObjectSize` (number): The size of the object of the dependent handle if it is a dependent handle
   - `DependentTypeToken` (number): The Token of the objects type of the dependent handle if it is a dependent handle
   - `DependenthType` (number): The MethodTable/TypeHandle of the objects type of the dependent handle if it is a dependent handle
-  - `DependentTypeName` (number): The name of the objects type of the dependent handle if it is a dependent handle
+  - `DependentTypeName` (string): The name of the objects type of the dependent handle if it is a dependent handle
 
 **Usage:**
 ```lua
@@ -747,6 +792,7 @@ end
 
 ### `GetMethodInfo(hMethod)`
 **Description**
+
 Returns a table that contains information about the method
 
 **Parameters:**
@@ -759,7 +805,7 @@ Returns a table that contains information about the method
   - `Name` (string): The name of the Method
   - `Attributes` (number): The attributes of the Method
   - `NativeCode` (number): The address of where the compiled code of the method is located. Or 0 if it hasn't been compiled yet
-  - `Signature` (string): The Signature of the method -> namespace.class:methodname(...)
+  - `Signature` (string): The Signature of the method -> namespace.class.methodname(...)
   - `ILAddress` (number): The address of where the methods IL Code is located
   - `ILSize` (number): The size of the methods IL Code
   - `ILFlags` (number): The Flags of the methods IL
@@ -775,6 +821,7 @@ print("Method Name is " .. methodInfo.Name)
 
 ### `GetMethodFromIP(ip)`
 **Description**
+
 Returns a table that contains information about the method that the ip(Instruction Pointer) is inside of.
 This can be anywhere inside a method in memory. But must be inside a method and not in some other part of memory
 
@@ -788,7 +835,7 @@ This can be anywhere inside a method in memory. But must be inside a method and 
   - `Name` (string): The name of the Method
   - `Attributes` (number): The attributes of the Method
   - `NativeCode` (number): The address of where the compiled code of the method is located. Or 0 if it hasn't been compiled yet
-  - `Signature` (string): The Signature of the method -> namespace.class:methodname(...)
+  - `Signature` (string): The Signature of the method -> namespace.class.methodname(...)
   - `ILAddress` (number): The address of where the methods IL Code is located
   - `ILSize` (number): The size of the methods IL Code
   - `ILFlags` (number): The Flags of the methods IL
@@ -804,6 +851,7 @@ print("Method Name is " .. methodInfo.Name)
 
 ### `GetTypeFromElementType(elementType, specialType)` 
 **Description**
+
 Returns a table that contains information about the type
 Valid values for `specialType` are: 1 -> HeapFree Type, 2 -> Exception Type
 If special type is not any of those it will check for the `elementType`
@@ -820,6 +868,7 @@ For valid **Element Types** see the `ClrElementType` Table at the Top of the `Do
   - `ElementType` (number): The Element Type of the type
   - `Name` (string): The name of the Type
   - `IsArray` (boolean): True if the type is an array type
+  - `IsEnum` (boolean): True if the type if an enum else false
   - `ComponentType` (table): Information about the component type int[] -> int. (**Only valid if the Type is an array type!**)
     - `ElementType` (number): The element type of the component type.
     - `TypeToken` (number): The token of the component type
@@ -831,6 +880,8 @@ For valid **Element Types** see the `ClrElementType` Table at the Top of the `Do
   **Below fields are only valid if the Type is NOT an array type!**
   - `InstanceFields` (table): Table containing all of the `instance` Fields
     - `TypeToken` (number): Token of the type of the field
+    - `hType` (number): The MethodTable/TypeHandle of the fields Type
+    - `TypeIsEnum` (boolean): True if the fields type is an enum else false
     - `Size` (number): The size of the field
     - `Offset` (number): The offset of the field inside an Object
     - `ElementType` (number): The element type of the type
@@ -841,6 +892,8 @@ For valid **Element Types** see the `ClrElementType` Table at the Top of the `Do
     - `IsStatic` (boolean): Will always be false for instance fields
   - `StaticFields` (table): Table containing all of the `static` Fields
     - `TypeToken` (number): Token of the type of the field
+    - `hType` (number): The MethodTable/TypeHandle of the fields Type
+    - `TypeIsEnum` (boolean): True if the fields type is an enum else false
     - `Size` (number): The size of the field
     - `Offset` (number): The offset of the field taken from the StaticFieldBaseAddress
     - `ElementType` (number): The element type of the type
@@ -860,6 +913,7 @@ print("Type Name is " .. typeData.Name)
 
 ### `GetCLRInfo()`
 **Description**
+
 Returns a table that contains information about the clr
 
 **Parameters:**
@@ -883,6 +937,7 @@ print("CLR Version is " .. clrInfo.Version)
 
 ### `EnumThreads()`
 **Description**
+
 Returns a table that contains all of the managed threads
 
 **Parameters:**
@@ -914,13 +969,14 @@ end
 
 ### `TraceStack(threadid)`
 **Description**
-Returns a table that contains all of stack frames of the thread
+
+Returns a table that contains all of the stack frames of the thread
 
 **Parameters:**
 - `threadid` (number): The **Managed** or **OS** thread id
 
 **Returns:**
-- A table containing information about all stack frames of the thread
+- A table containing information about all of the stack frames of the thread
   - `StackPointer` (number): The stack pointer of the Stack in this stack frame
   - `InstructionPointer` (number): The IP of the stack frame -> The return address
   - `FrameKind` (number): The King this stack frame is
@@ -929,7 +985,7 @@ Returns a table that contains all of stack frames of the thread
   - `Method` (table): A Table containing information about the method, if the stack frame is inside a method
     - `MethodToken` (number): The Token of the Method
     - `hMethod` (number): The MethodDesc of the Method
-    - `NativeCode` (number): The address of where the compiled metod body starts
+    - `NativeCode` (number): The address of where the compiled method body starts
     - `Name` (string); The name of the method
     - `Signature` (string): The Signature of the method
 
@@ -937,12 +993,13 @@ Returns a table that contains all of stack frames of the thread
 ```lua
 local stacktrace = collectorEx.TraceStack(1) -> Managed Thread Ids seem to be 1,2,3,...
 for _,frame in ipairs(stacktrace) do
-  print("Frame full name is: " .. frame.FrameName)
+  print("Frame full name is: " .. frame.FullName)
 end
 ```
 
 ### `GetThreadFromID(threadid)`
 **Description**
+
 Returns a table that contains information about the managed thread
 
 **Parameters:**
@@ -972,7 +1029,9 @@ print("Thread Managed Id: " .. thread.ManagedThreadId)
 
 ### `FlushDACCache()`
 **Description**
-Flushes the DAC Cache - Might want to call this if new objects have been allocated and you want to search for them.
+
+Flushes the DAC Cache - Might want to call this if new objects have been allocated or new methods jitted.
+You might also want to call this if you can't find a method that you now/think should have been compiled
 
 **Parameters:**
 - None
@@ -985,26 +1044,12 @@ Flushes the DAC Cache - Might want to call this if new objects have been allocat
 collectorEx.FlushDACCache()
 ```
 
-### `ReplaceLegacyDataCollector(restore)`
-**Description:**  
-Replaces the legacy `DotNetDataCollector` with `DotNetDataCollectorEx`.
-This is recommended for debugging **.NET 8+ applications**, as the legacy collector does not support those versions.
-Only needed if `DotNetDataCollectorEx` is run in **extension mode** and not **replacement mode**.
-
-**Parameters:**
-- `restore` (boolean): Should restore the old DotNetDataCollector?
-
-**Usage:**
-```lua
-local collectorEx = getDotNetDataCollectorEx()
-collectorEx.ReplaceLegacyDataCollector(false)
-```
-
 **Returns:**
 - A boolean (true on success and false on failure)
 
 ### `DumpModule(hModule, outputFilePath)`
 **Description**
+
 Dumps the specified module `hModule` to disc `outputFilePath`.
 `outputFilePath` Needs to be the **full** file path including the file name!
 Can only dump modules that are not **dynamic**!
@@ -1031,6 +1076,7 @@ end
 
 ### `DumpModuleEx(module, outputPath)`
 **Description**
+
 Dumps the specified module `module` to disc.
 Is `outputPath` is a string then it needs to be a valid directory.
 Can only dump modules that are not **dynamic**!
@@ -1056,8 +1102,174 @@ else
 end
 ```
 
+### `FindMethod(hModule, fullClassName, methodName, paramCount, caseSensitive)`
+**Description**
+
+Searches for the method in the Module `hModule` or in all Modules if `hModule` is not the Handle to a valid Module!
+Let's say we have the method MyNameSpace.Foo:Bar(int i, bool b).
+The fullClassName should be: "MyNameSpace.Foo" and the methodName should be "Bar".
+
+**Parameters:**
+- (OPTIONAL) hModule (number): The Handle of the Module to search for the method in.
+- fullClassName (string): The full class name for which the method resides inside of -> "namespace.classname"
+- methodName (string): The method name to searh for
+- (OPTIONAL) paramCount (number): The parameter Count the method should have. If this is not a number or -1 then it will ignore the parameter Count. MyNameSpace.Foo:Bar(int i, bool b) -> paramCount = 2
+- (OPTIONAL) caseSensitive (boolean): If this is true `fullClassName` and `methodName` are case sensitive.
+
+**Returns:**
+- A table containing information about the method
+  - `MethodToken` (number): The token of the Method
+  - `hMethod` (number): The MethodDesc of the Method
+  - `Name` (string): The name of the Method
+  - `Attributes` (number): The attributes of the Method
+  - `NativeCode` (number): The address of where the compiled code of the method is located. Or 0 if it hasn't been compiled yet
+  - `Signature` (string): The Signature of the method -> namespace.class.methodname(...)
+  - `ILAddress` (number): The address of where the methods IL Code is located
+  - `ILSize` (number): The size of the methods IL Code
+  - `ILFlags` (number): The Flags of the methods IL
+  - `MethodRegions` (table): Table containing the methods compiled code regions if any
+    - `StartAddress` (number): The start adddress if this code region
+    - `Size` (number): The size of this code region
+
+**Usage:**
+```lua
+local methodInfo = collectorEx.FindMethod(nil, 'mynamespace.foo', 'bar', 2, false)
+print("Method Signature is " .. methodInfo.Signature)
+```
+
+### `FindMethodByDesc(hModule, methodSignature, caseSensitive)`
+**Description**
+
+Searches for the method in the Module `hModule` or in all Modules if `hModule` is not the Handle to a valid Module!
+Let's say we have the method MyNameSpace.Foo:Bar(int i, bool b).
+The `methodSignature` should look something like this: "MyNameSpace.Foo.Bar(System.Int32, System.Boolean)" or "MyNameSpace.Foo:Bar(System.Int32, System.Boolean)"
+
+**Parameters:**
+- (OPTIONAL) hModule (number): The Handle of the Module to search for the method in.
+- methodSignature (string): The method signature of the method to search for
+- (OPTIONAL) caseSensitive (boolean): If this is true `methodSignature` is case sensitive.
+
+**Returns:**
+- A table containing information about the method
+  - `MethodToken` (number): The token of the Method
+  - `hMethod` (number): The MethodDesc of the Method
+  - `Name` (string): The name of the Method
+  - `Attributes` (number): The attributes of the Method
+  - `NativeCode` (number): The address of where the compiled code of the method is located. Or 0 if it hasn't been compiled yet
+  - `Signature` (string): The Signature of the method -> namespace.class.methodname(...)
+  - `ILAddress` (number): The address of where the methods IL Code is located
+  - `ILSize` (number): The size of the methods IL Code
+  - `ILFlags` (number): The Flags of the methods IL
+  - `MethodRegions` (table): Table containing the methods compiled code regions if any
+    - `StartAddress` (number): The start adddress if this code region
+    - `Size` (number): The size of this code region
+
+**Usage:**
+```lua
+local methodInfo = collectorEx.FindMethodByDesc(nil, 'MyNameSpace.Foo.Bar(System.Int32, System.Boolean)', true)
+print("Method MethodToken is " .. methodInfo.MethodToken)
+```
+
+### `FindClass(hModule, fullClassName, caseSensitive)`
+**Description**
+
+Searches for the class in the Module `hModule` or in all Modules if `hModule` is not the Handle to a valid Module!
+Let's say we have the class MyNameSpace.Foo
+The `fullClassName` should look like this: "MyNameSpace.Foo" if it is a nested class: "MyNameSpace.Foo+Bar" where "Bar" is the nested class
+
+**Parameters:**
+- (OPTIONAL) hModule (number): The Handle of the Module to search for the method in.
+- fullClassName (string): The full class name of the class to search for
+- (OPTIONAL) caseSensitive (boolean): If this is true `fullClassName` is case sensitive.
+
+**Returns:**
+- A table containing information about the class
+  - `TypeToken` (number): The token of the type
+  - `hType` (number): The MethodTable/TypeHandle of the type
+  - `ElementType` (number): The Element Type of the type
+  - `Name` (string): The name of the Type
+  - `IsArray` (boolean): True if the type is an array type
+  - `IsEnum` (boolean): True if the type if an enum else false
+  - `ComponentType` (table): Information about the component type int[] -> int. (**Only valid if the Type is an array type!**)
+    - `ElementType` (number): The element type of the component type.
+    - `TypeToken` (number): The token of the component type
+    - `hType` (number) The MethodTable/TypeHandle of the component type
+    - `Name` (string) The name of the component type
+  - `CountOffset` (number): The offset of where the Count is stored inside the Array Object. (**Only valid if the Type is an array type!**)
+  - `ComponentSize` (number): The size of each element inside the Array Object. (**Only valid if the Type is an array type!**)
+  - `FirstElementOffset` (number): The offset of the first element inside the Array Object. (**Only valid if the Type is an array type!**)
+  **Below fields are only valid if the Type is NOT an array type!**
+  - `InstanceFields` (table): Table containing all of the `instance` Fields
+    - `TypeToken` (number): Token of the type of the field
+    - `hType` (number): The MethodTable/TypeHandle of the fields Type
+    - `TypeIsEnum` (boolean): True if the fields type is an enum else false
+    - `Size` (number): The size of the field
+    - `Offset` (number): The offset of the field inside an Object
+    - `ElementType` (number): The element type of the type
+    - `Attributes` (number): The attributes of the field
+    - `Name` (string): The name of the field
+    - `TypeName` (string): The name of the fields type
+    - `Address` (number): Will always be 0 here
+    - `IsStatic` (boolean): Will always be false for instance fields
+  - `StaticFields` (table): Table containing all of the `static` Fields
+    - `TypeToken` (number): Token of the type of the field
+    - `hType` (number): The MethodTable/TypeHandle of the fields Type
+    - `TypeIsEnum` (boolean): True if the fields type is an enum else false
+    - `Size` (number): The size of the field
+    - `Offset` (number): The offset of the field taken from the StaticFieldBaseAddress
+    - `ElementType` (number): The element type of the type
+    - `Attributes` (number): The attributes of the field
+    - `Name` (string): The name of the field
+    - `TypeName` (string): The name of the fields type
+    - `Address` (number): The address of the field
+    - `IsStatic` (boolean): Will always be true for static fields
+  - `AllFields` (table): Same as the above two but contains both `instance` and `static fields`
+      - `see above two tables`
+      
+**Usage:**
+```lua
+local typeData = collectorEx.FindClass(nil, 'MyNameSpace.Foo', true)
+print("Type Token is " .. typeData.TypeToken)
+```
+
+### `ReplaceLegacyDataCollector(restore)`
+**Description:**
+
+Replaces the legacy `DotNetDataCollector` with `DotNetDataCollectorEx`.
+This is recommended for debugging **.NET 8+ applications**, as the legacy collector does not support those versions.
+Only needed if `DotNetDataCollectorEx` is run in **extension mode** and not **replacement mode**.
+
+**Parameters:**
+- `restore` (boolean): Should restore the old DotNetDataCollector?
+
+**Usage:**
+```lua
+local collectorEx = getDotNetDataCollectorEx()
+collectorEx.ReplaceLegacyDataCollector(false)
+```
+
+### `RegisterCallbacks(unregister)`
+**Description:**
+
+- Can only be used if DotNetDataCollectorEx is running in `Extension Mode`, meaning it is running as it's own process. -> **.net 8+** Targets for example
+- This should be used if the LegacyDotNetDataCollector is not running and you are running in `Extension Mode` and not `Replacement Mode`
+- This will register 4 callbacks:
+ - 'AddressLookupCallback': This is used by **Cheat Engine** to search for symbols in the Memory View window. Meaning Symbols for methods will be displayed!
+ - 'SymbolLookupCallback': This is used by **Cheat Engine** to search for symbols in general. This means that If you for example use "Goto Address" or try to refernce the symbol somewhere. This is used for Methods so you can do -> GotoAddress(MyNameSpace.Foo:Bar)
+ - 'StructureNameLookupCallback': This is used by **Cheat Engine's** Disscet data/structures. This will give structures the Class Name when dissecting a Managed Object like "Game.Player" for example
+ - 'StructureDissectOverride': This is used by **Cheat Engine's** Disscet data/structures. This will create the strucuture for Managed Objects meaning it will fill the structure with all of the fields inside the Object's class.
+ 
+**Parameters:**
+- `unregister` (boolean): Should unregister all callbacks?
+
+**Usage:**
+```lua
+local collectorEx = getDotNetDataCollectorEx()
+collectorEx.RegisterCallbacks(false)
+```
+
 ---
 
 ## Notes:
 - `DotNetDataCollectorEx` provides additional functionality that the legacy collector does not.
-- When debugging **.NET 8+**, calling `ReplaceLegacyDataCollector()` ensures **almost** full Cheat Engine compatibility.
+- When debugging **.NET 8+**, calling `ReplaceLegacyDataCollector()` and `RegisterCallbacks()` ensures **almost** full Cheat Engine compatibility.

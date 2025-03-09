@@ -44,7 +44,7 @@ If you place the `DotNetDataCollectorEx.lua` file into the `autorun` folder then
 In this mode:
 - **DotNetDataCollectorEx** runs alongside the legacy **DotNetDataCollector**.
 - You can **dynamically replace the legacy collector** later using a Lua function. For more info refer to [this section](#replace-legacy-datacollector-using-lua)
-- Replacing the **legacy collector** will only work on the **lua side**! This means that the **symbol handler** and **Data Disector** (**currently**) won't work!
+- If you also want the **symbol handler** and **Data Dissector** to work you should call this lua function [RegisterCallbacks](LUA_API.md#registercallbacksunregister) but this is also explained in [this section](#replace-legacy-datacollector-using-lua)
 
 ### **Replace Legacy DataCollector Using Lua**
 - `ReplaceLegacyDataCollector(restore)`
@@ -52,19 +52,22 @@ In this mode:
 - Should only be used/required if you use it in **Extension Mode** and not **Replacement Mode**.
 - Replaces the legacy **DotNetDataCollector** with **DotNetDataCollectorEx** at runtime.
 - Use this function to switch to the new collector for **.NET 8+** applications.
-- If you want to restore the legacy **DotNetDataCollector** you can call this function with `restore` being `true`
+- If you want to restore the legacy **DotNetDataCollector** you can call this function with `restore` being `true`.
 - Do note that this will only replace it on the **lua side**!
-- If used in **Extension Mode** then the **symbol handler** and **Data Disector** (**currently**) won't work (give no info)!
+- If you also want the **symbol handler** and **Data Dissector** to work do this:
+- `RegisterCallbacks(unregister)`
+- A method of the object returned by `getDotNetDataCollectorEx()`.
+- Registers callbacks to make the **symbol handler** and **Data Dissector** work again.
+- Can **only** be used if run in **Extension Mode**!
+- If you want to remove the callbacks again call `RegisterCallbacks(unregister)` with `unregister` being `true`.
 
 - #### Example Usage in Lua:
 ```lua
 local collectorEx = getDotNetDataCollectorEx()  -- Get the new collector object
 collectorEx.ReplaceLegacyDataCollector()        -- Replace the old collector with the new one for .NET 8+
 
-if (true) -- Optional reinitialize the DotNetSymbolHandler so the Disassembler shows the Names of Methods
-  createThread(function () -- Do it async so it doesn't block the main thread freezing Cheat Engine
-    reinitializeDotNetSymbolhandler()
-  end)
+if (true) -- Optional. Also register callbacks to make the symbol handler and Data Dissector work again
+  collectorEx.RegisterCallbacks()
 end
 ```
 
@@ -83,6 +86,8 @@ end
 If you want to debug **.NET 8+** applications in **Extension Mode**, then it is **recommended** to call `ReplaceLegacyDataCollector` to replace the legacy collector, as the legacy version does not support **.NET 8+**. This is important because other **Cheat Engine** functionality that relies on **DotNetDataCollector** will only work with **.NET 8+** if you use the new version. These include but are not limited to:
 - The `.net Info` Window
 - `dotnetinterface.lua` used for example for Jitting methods.
+  
+If you also want Cheat Engines **Symbol Handler** and **Data Disector** to work again also call `RegisterCallbacks`
 
 ---
 
@@ -95,10 +100,6 @@ If you want to debug **.NET 8+** applications in **Extension Mode**, then it is 
 - **DotNetDataCollectorEx**:
   - Supports **.NET Framework 4.5+** and is the only version that supports **.NET 8+**.
   - Provides, in some cases, more detailed memory analysis and additional features compared to the legacy version.
-
-- **Extension Mode**
-  - **Cheat Engine's** Symbol Handler does not work. This means no Symbols in the `Memory View` window.
-  - **Cheat Engine's** Dissect data/structures doed not work. This means no info provided for structures. So no fields are automatically filled and no name is automatically given to the structure.
 
 ### Known Limitations:
 - Certain operations may incur slightly higher performance overhead compared to the legacy collector.

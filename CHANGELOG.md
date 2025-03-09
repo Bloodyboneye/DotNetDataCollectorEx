@@ -9,9 +9,25 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Added
 - Parsing Method/Parameter Metadata to be in line with the legacy data collector and add stuff like parameter names instead of only parameter **type** names
 - Parsing other Metadata manually to add more functionality
-- Adding structure handling and other similar stuff to the `DotNetDataCollectorEx.lua` file so the `Dissect data/structures` and other symbol handler stuff works in **Extension Mode**
 
 ---
+
+## [2.1.0] - 2025-03-09
+### Added
+- New Lua function [`FindMethod`](LUA_API.md#findmethodhmodule-fullclassname-methodname-paramcount-casesensitive) for finding methods.
+- New Lua function [`FindMethodByDesc`](LUA_API.md#findmethodbydeschmodule-methodsignature-casesensitive) for finding methods.
+- New Lua function [`FindClass`](LUA_API.md#findclasshmodule-fullclassname-casesensitive) for finding classes.
+- New Lua function [`RegisterCallbacks`](LUA_API.md#registercallbacksunregister)
+- Added `IsEnum` field to most tables that return type info
+- Added `hType` field to all tables that return instance and static fields
+- Added `TypeIsEnum ` field to all tables that return instance and static fields
+
+### Changed
+- `pipeReadTimeout` is now it's own value in the `DotNetDataCollectorEx.lua` file which tells the pipe when to timeout. Before it was the same as `pipeConnectionTimeOut`
+
+### Fixed
+- Field Offsets in types/classes are now correct.
+- All Methods will now fail if the pipe is not Valid. -> DotNetDataCollectorEx is attached to wrong process.
 
 ## [2.0.0] - 2025-03-04
 ### Added

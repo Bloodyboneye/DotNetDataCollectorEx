@@ -208,7 +208,7 @@ Does the same as **Cheat Engine's** `DotNetDataCollector` `legacy_getMethodParam
 
 **Returns:**
 - A table containing Information about the methods parameters
-  - `Name` (string): This would normally be the name of the `Parameter` but in the current implementation this is the `Types name` of the `parameter`
+  - `Name` (string): This is the name of the method parameter
   - `CType` (number): The Element Type of the method parameter
 
 **Usage:**
@@ -614,6 +614,7 @@ Returns a table containing information about the methods parameters
 - A table containing information about all of parameters inside the method
   - `Signature` (string): The Signature of the Method
   - `<parameter Index>` (table): A table that contains information about the Parameter at that index(1,2,3,4,...) inside the Method -> foo:bar(int i1, bool b1, string s1) -> int i1 is index 1, bool b1 is index 2, string s1 is index 3 ...
+    - `ParameterName` (string): The name of the parameter
     - `ParameterTypeName` (string): The Name of the parameters Type
     - `ElementType` (number): The Element Type of the parameters Type
     - `Location` (number): The index of the parameter inside the method, kind of useless...

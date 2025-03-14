@@ -103,7 +103,6 @@ If you also want Cheat Engines **Symbol Handler** and **Data Disector** to work 
 
 ### Known Limitations:
 - Certain operations may incur slightly higher performance overhead compared to the legacy collector.
-- **Parameter Names** returned by `getMethodParameters` are not the **actual** name of the parameter but the name of the type. This is because [ClrMD](https://github.com/microsoft/clrmd) does not expose those.
 - **DotNetDataCollectorEx** seems to miss some **types(classes)** that Cheat Engine's **DotNetDataCollector** finds. This is as far as I understand because [ClrMD](https://github.com/microsoft/clrmd) is only able to find **constructed types**. Though in **my testing** it found **most** types and **all** that where actually useful to me.
 
 ---

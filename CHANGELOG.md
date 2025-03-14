@@ -7,8 +7,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 ### Added
-- Parsing Method/Parameter Metadata to be in line with the legacy data collector and add stuff like parameter names instead of only parameter **type** names
 - Parsing other Metadata manually to add more functionality
+
+---
+
+## [2.2.0] - 2025-03-10
+### Added
+- Added `ParameterName` field for Lua function [`GetMethodParameters`](LUA_API.md#getmethodparametershmethod)
+
+### Changed
+- The Lua function [`legacy_getMethodParameters`](LUA_API.md#legacy_getmethodparametersmodulehandle-methoddeftoken) will now correctly return the parameter name instead of the type name. This will also fix it when replacing the legacy DataCollector.
+- The Lua function [`legacy_getTypeDefMethods`](LUA_API.md#legacy_gettypedefmethodsmodulehandle-typedeftoken) will now correcly return the full ImplementationFlags.
 
 ---
 
@@ -28,6 +37,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Fixed
 - Field Offsets in types/classes are now correct.
 - All Methods will now fail if the pipe is not Valid. -> DotNetDataCollectorEx is attached to wrong process.
+
+---
 
 ## [2.0.0] - 2025-03-04
 ### Added

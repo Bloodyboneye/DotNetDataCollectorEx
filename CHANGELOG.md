@@ -9,6 +9,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Added
 - Parsing other Metadata manually to add more functionality
 
+## [2.3.0] - 2025-03-14
+### Changed
+- Added Symbol cache on lua side for caching symbols used by cheat engine.
+- Added validity checks for method names, namespaces and class names in methods that use those to find them for faster symbol lookup in case the symbol is not valid.
+
+### Fixes
+- Fixes Crash when getting method parameters that for methods in parent classes that are in other modules.
+
 ---
 
 ## [2.2.0] - 2025-03-10

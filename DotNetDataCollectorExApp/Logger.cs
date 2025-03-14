@@ -38,7 +38,7 @@
 
         public static void LogException(Exception ex)
         {
-            DoLog($"[EXCEPTION] {ex.Message}\nStackTrace: {ex.StackTrace}", LogSeverity.Exception);
+            DoLog($"[EXCEPTION] {ex}", LogSeverity.Exception);
         }
     }
 }

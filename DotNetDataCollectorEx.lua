@@ -8,6 +8,8 @@ local pipeReadTimeout = 10000
 local StructureDefaultArrayCount = 9
 local pointerSize = targetIs64Bit() and 8 or 4
 
+local symbolCache = {}
+
 registerLuaFunctionHighlight("getDotNetDataCollectorEx")
 
 DotNetDataCollectorExCommands = {
@@ -129,6 +131,37 @@ PipeServerState = {
 
 local commands = DotNetDataCollectorExCommands
 
+local function isValidNamespaceClassName(name)
+    if not name or name == "" then return false end
+
+    local first, last = name:byte(1), name:byte(-1)
+    if first == 46 or last == 46 then -- 46 is ASCII for '.'
+        return false
+    end
+
+    if name:find("[@#$%^&*()%+=/\\,;:%%[%]{}|<>?]") then
+        return false
+    end
+
+    for part in name:gmatch("[^.]+") do
+        if not part:match("^[A-Za-z_][A-Za-z0-9_]*$") then
+            return false
+        end
+    end
+
+    return true
+end
+
+local function isValidMethodName(name)
+    if not name or name == "" then return false end
+
+    if name:find("[@#$%^&*()%+=/\\,;:%%[%]{}|<>?.]") then
+        return false
+    end
+
+    return name:match("^[A-Za-z_][A-Za-z0-9_]*$") ~= nil
+end
+
 local function dotnetex_readString()
     local stringsize = dotnetpipeex.readDword()
     local strbt = dotnetpipeex.readBytes(stringsize)
@@ -145,7 +178,6 @@ local function dotnetex_I_splitSymbol(symbol)
     local result = nil
   
     local parts = {}
-    local x
     -- Split the symbol by '.' or ':' to get parts
     for x in string.gmatch(symbol, "[^:.]+") do
       table.insert(parts, x)
@@ -558,12 +590,37 @@ function dotnetex_exportStruct(atype, typeName, structmap, makeglobal, reload)
 end
 
 local function dotnetex_AddressLoopupCallback(address)
+    if (address == 0) then return nil end -- Because of the cache table
     if (dotnetpipeex == nil or dotnetpipeex.pipeInfo == nil) then return nil end
-    if (debug_isBroken()) then return nil end -- Will timeout pipe without this
 
     if (not dotnetpipeex.isValid()) then return nil end
 
     if (dotnetpipeex.pipeInfo.RunningState & PipeServerState.RunningAsExtension == 0) then return nil end
+
+    local sce = symbolCache[address]
+
+    if (sce ~= nil) then
+        -- Check cache for symbol
+        if (sce.e) then return nil end -- Invalid address/method already cached
+        if (sce.s) then return sce.s end -- Start of Method, just return name
+        if (sce.o) then
+            -- Handle offsets
+            local sce2 = symbolCache[address - sce.o] -- Get Base Symbol
+            if (sce2 and sce2.s) then
+                return string.format("%s+%x", sce2.s, sce.o)
+            end
+        end
+    end
+
+    if (readByte(address) == nil) then
+        symbolCache[address] = { e = true } -- Ignore Invalid addresses, these might be offsets / other stuff
+        return nil
+    end
+
+    --print(type(sce))
+    --printf("%X",address)
+
+    if (debug_isBroken()) then return nil end -- Will timeout pipe without this
 
     local result = ''
 
@@ -571,28 +628,51 @@ local function dotnetex_AddressLoopupCallback(address)
 
     if (method and method.Signature and method.NativeCode and method.MethodRegions and method.MethodRegions[1] and method.MethodRegions[1].StartAddress and method.MethodRegions[1].Size) then
         if (address < method.NativeCode) then
+            symbolCache[address] = { e = true } -- Cache invalid methods
             return nil -- For some reason GetMethodFromIP will also return methods that are not within the actual method range but maybe a sort of copy of the method??? Or does it return the wrong method?
         end
         
         -- Handle the case in which the method lies outside of the "Hot" Region
-        if (address > method.MethodRegions[1].StartAddress + method.MethodRegions[1].Size) then return nil end -- Ignore if outside of Hot Region
+        if (address > method.MethodRegions[1].StartAddress + method.MethodRegions[1].Size - 1) then
+            symbolCache[address] = { e = true}
+            return nil
+        end -- Ignore if outside of Hot Region
         --local class = DotNetDataCollectorEx.GetTypeFromMethod(method.hMethod)
         local name = string.match(method.Signature, "^%s*([^%s%(]+)%s*%(")
         if (name) then
             name = name:match("%.cc?tor$") and name:gsub("%.%.(c?ctor)$", ":.%1") or name:gsub("(.*)%.", "%1:") -- Replace class.methodname with class:methodname
             result = result..name
         end
-        if (not name or #name == 0) then return nil end -- Ignore empty names
+        if (not name or #name == 0) then -- Ignore empty names
+            symbolCache[address] = {e = true}
+            return nil
+        end
+
+        -- Add method to cache
+        local baseaddr = method.MethodRegions[1].StartAddress
+        for i = 0, method.MethodRegions[1].Size -1 do
+            local ce = {}
+            if (i == 0) then
+                ce.s = name
+            else
+                ce.o = i
+            end
+            
+            symbolCache[baseaddr + i] = ce
+        end
 
         if (address ~= method.NativeCode) then
             result = result..string.format("+%x",address - method.NativeCode)
         end
+    else
+        symbolCache[address] = { e = true } -- Cache invalid addresses
     end
 
     return result
 end
 
 local function dotnetex_SymbolLookupCallback(symbol, recursive)
+    --print(symbol)
     if (dotnetpipeex == nil or dotnetpipeex.pipeInfo == nil) then return nil end
 
     if (not dotnetpipeex.isValid()) then return nil end
@@ -605,7 +685,7 @@ local function dotnetex_SymbolLookupCallback(symbol, recursive)
     --print(ss.classname)
     --print(ss.namespace)
 
-    if (ss.methodname~='') and (ss.classname~='') then
+    if (isValidMethodName(ss.methodname)) and (isValidNamespaceClassName(ss.namespace..ss.classname)) then
         local method=DotNetDataCollectorEx.FindMethod(nil, ss.namespace..'.'..ss.classname, ss.methodname)
         if (method == nil or method.NativeCode == nil) then
             if (recursive) then
@@ -1722,6 +1802,7 @@ function getDotNetDataCollectorEx()
     if (dotnetpipeex == nil or tonumber(dotnetpipeex.processid) ~= getOpenedProcessID()) then
         --print("Launching DotNetDataCollectorEx")
 
+        symbolCache = {} -- Clear and create new symbol cache
         if (not LaunchDotNetDataCollectorEx()) then
             print("Failed to launch DotNetDataCollectorEx")
             return nil

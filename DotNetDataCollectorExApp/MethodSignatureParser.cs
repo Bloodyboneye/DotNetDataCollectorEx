@@ -1,10 +1,15 @@
 ﻿using Microsoft.Diagnostics.Runtime;
+using System;
 using System.Text;
+using System.Buffers;
 
 namespace DotNetDataCollectorEx
 {
     public static class MethodSignatureParser
     {
+        private static readonly SearchValues<char> s_invalidCharsNSC = SearchValues.Create("@#$%^&*()-+=/\\,;:[]{}|<>?");
+        private static readonly SearchValues<char> s_invalidCharsMethod = SearchValues.Create("@#$%^&*()-+=/\\,;:[]{}|<>?.");
+
         public enum CPlusTypeFlag
         {
             ELEMENT_TYPE_NONE = 0x00,
@@ -127,21 +132,31 @@ namespace DotNetDataCollectorEx
             return parameters;
         }
 
-        public static string MethodSignatureGetFullTypeName(string methodSignature)
+        public static string MethodSignatureGetFullTypeName(string? methodSignature)
         {
             if (string.IsNullOrEmpty(methodSignature))
                 return "";
 
+            // Find the last '(' in the signature to mark the start of parameters
             int lastParenIndex = methodSignature.IndexOf('(');
             if (lastParenIndex == -1)
                 lastParenIndex = methodSignature.Length;
 
+            // Find the last dot or colon before the parameter list (or the end of the string)
             int lastSeparatorIndex = methodSignature.LastIndexOfAny(['.', ':'], lastParenIndex - 1);
 
             if (lastSeparatorIndex == -1)
                 return "";
 
-            return methodSignature[..lastSeparatorIndex];
+            string fullTypeName = methodSignature[..lastSeparatorIndex];
+
+            // Remove trailing period if it's from a constructor or static constructor / remove trailing colon if the signature uses those
+            if (fullTypeName.EndsWith('.') || fullTypeName.EndsWith(':'))
+            {
+                fullTypeName = fullTypeName[..^1];
+            }
+
+            return fullTypeName;
         }
 
         public static bool AreMethodSignaturesEqual(string signature1, string signature2, bool caseSensitive)
@@ -152,6 +167,59 @@ namespace DotNetDataCollectorEx
             return signature1.Equals(signature2, caseSensitive ? StringComparison.Ordinal : StringComparison.OrdinalIgnoreCase) || (caseSensitive
                 ? NormalizeMethodSignature(signature1).Equals(NormalizeMethodSignature(signature2))
                 : NormalizeMethodSignature(signature1).Equals(NormalizeMethodSignature(signature2), StringComparison.OrdinalIgnoreCase));
+        }
+
+        public static bool IsValidNamespaceClassName(ReadOnlySpan<char> input)
+        {
+            if (input.IsEmpty || input[0] == '.' || input[^1] == '.')
+                return false;
+
+            if (input.IndexOfAny(s_invalidCharsNSC) >= 0)
+                return false;
+
+            bool expectStart = true;
+            foreach (char c in input)
+            {
+                if (c == '.')
+                {
+                    expectStart = true;
+                    continue;
+                }
+
+                if (expectStart)
+                {
+                    if (!char.IsLetter(c) && c != '_') return false;
+                    expectStart = false;
+                }
+                else
+                {
+                    if (!char.IsLetterOrDigit(c) && c != '_') return false;
+                }
+            }
+
+            return !expectStart;
+        }
+
+        public static bool IsValidMethodName(ReadOnlySpan<char> input)
+        {
+            if (input.IsEmpty)
+                return false;
+
+            if (input.IndexOfAny(s_invalidCharsMethod) >= 0)
+                return false;
+
+            // Method names can start with a letter or underscore
+            if (!char.IsLetter(input[0]) && input[0] != '_')
+                return false;
+
+            // Remaining characters can be letters, digits, or underscores
+            for (int i = 1; i < input.Length; i++)
+            {
+                if (!char.IsLetterOrDigit(input[i]) && input[i] != '_')
+                    return false;
+            }
+
+            return true;
         }
 
         private static string NormalizeMethodSignature(string signature)

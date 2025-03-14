@@ -40,6 +40,38 @@ namespace DotNetDataCollectorEx
             return thread.EnumerateStackTrace(includeContext, maxFrames);
         }
 
+        public static ClrType? GetRealClrTypeFromMethod(ClrMethod method, bool includeInterfaces = false)
+        {
+            // The ClrMethod.Type is not always the "real" type so make sure to get that
+            string fullTypeName = MethodSignatureParser.MethodSignatureGetFullTypeName(method.Signature);
+            if (string.IsNullOrEmpty(fullTypeName))
+                return null;
+            ClrType? declaringType = method.Type;
+            while (declaringType != null)
+            {
+                if (fullTypeName.Equals(declaringType.Name, StringComparison.OrdinalIgnoreCase))
+                    return declaringType;
+                if (includeInterfaces)
+                {
+                    int lastDotIndex = fullTypeName.LastIndexOf('.');
+                    if (lastDotIndex != -1)
+                    {
+                        string namespaceString = fullTypeName[..lastDotIndex];
+                        Console.WriteLine(namespaceString);
+                        foreach (ClrInterface clrInterface in declaringType.EnumerateInterfaces())
+                        {
+                            if (clrInterface.Name.StartsWith(namespaceString))
+                            {
+                                return declaringType; // Best effort, only compare namespace...
+                            }
+                        }
+                    }
+                }
+                declaringType = declaringType.BaseType;
+            }
+            return null;
+        }
+
         public static ulong GetValidObjectForAddress(ClrSegment segment, ulong address, bool previous = false)
         {
             if (segment.FirstObjectAddress == 0)

@@ -659,17 +659,32 @@ namespace DotNetDataCollectorEx
             if (methods.Length == 0)
                 return;
 
-            ModuleMetadataReader? metadataReader = TryGetOrCreateModuleMetaDataReader(methods[0].Type.Module);
-
             foreach (ClrMethod method in methods)
             {
-                MethodDefinition? methoddef = null;
-                _ = metadataReader?.TryGetMetaData(method.MetadataToken, out methoddef);
                 ILInfo? ilInfo = method.GetILInfo();
+                uint implAttribs = ilInfo?.Flags ?? 0;
+                ClrType? methodType = ClrExtensions.GetRealClrTypeFromMethod(method);
+                if (methodType != null)
+                {
+                    try
+                    {
+                        ModuleMetadataReader? metadataReader = TryGetOrCreateModuleMetaDataReader(methodType.Module);
 
-                uint implAttribs = (uint)(methoddef?.ImplAttributes ?? 0);
-                if (methoddef?.ImplAttributes == null)
-                    implAttribs = ilInfo?.Flags ?? 0;
+                        MethodDefinition? methoddef = null;
+                        _ = metadataReader?.TryGetMetaData(method.MetadataToken, out methoddef);
+
+                        if (methoddef.HasValue)
+                        {
+                            implAttribs = (uint)methoddef.Value.ImplAttributes;
+                        }
+                    }
+                    catch (Exception ex)
+                    {
+#if DEBUG
+                        Logger.LogException(ex);
+#endif
+                    }
+                }
 
                 WriteDword((uint)method.MetadataToken);
                 WriteUTF16String(method.Name ?? string.Empty);
@@ -1006,27 +1021,48 @@ namespace DotNetDataCollectorEx
                 return;
             }
 
-            ModuleMetadataReader? metadataReader = TryGetOrCreateModuleMetaDataReader(method.Type.Module);
+            ClrType? methodType = ClrExtensions.GetRealClrTypeFromMethod(method);
+
+            ModuleMetadataReader? metadataReader = null;
+
+            if (methodType != null)
+            {
+                metadataReader = TryGetOrCreateModuleMetaDataReader(methodType.Module);
+            }
             MethodDefinition? methodDefinition = null;
             _ = metadataReader?.TryGetMetaData((int)methodDef, out methodDefinition);
             List<string> paramNames = [];
 
-            if (methodDefinition.HasValue && metadataReader != null)
+            try
             {
-                // Handle method Parameters Correctly
-                foreach (ParameterHandle mparam in methodDefinition.Value.GetParameters())
+                if (methodDefinition.HasValue && metadataReader != null)
                 {
-                    Parameter? _param = metadataReader.GetDefinitionFromHandle<Parameter>(mparam);
-                    if (_param.HasValue)
+                    // Handle method Parameters Correctly
+                    foreach (ParameterHandle mparam in methodDefinition.Value.GetParameters())
                     {
-                        string paramName = metadataReader.GetStringFromHandle(_param.Value.Name);
-                        if (!string.IsNullOrEmpty(paramName))
-                            paramNames.Insert(_param.Value.SequenceNumber - 1, paramName);
-                        else
-                            paramNames.Insert(_param.Value.SequenceNumber - 1, "<Unknown>");
+                        Parameter? _param = metadataReader.GetDefinitionFromHandle<Parameter>(mparam);
+                        if (_param.HasValue)
+                        {
+                            string paramName = metadataReader.GetStringFromHandle(_param.Value.Name);
+                            int index = _param.Value.SequenceNumber - 1;
+                            if (index < 0)
+                                break; // Failed to get parameters
+
+                            if (!string.IsNullOrEmpty(paramName))
+                                paramNames.Insert(index, paramName);
+                            else
+                                paramNames.Insert(index, "<Unknown>");
+                        }
                     }
                 }
             }
+            catch (Exception ex)
+            {
+#if DEBUG
+                Logger.LogException(ex);
+#endif
+            }
+
             
             var methodParams = MethodSignatureParser.ParseSignature(method.Signature ?? string.Empty);
 
@@ -1326,26 +1362,45 @@ namespace DotNetDataCollectorEx
                 return;
             }
 
-            ModuleMetadataReader? metadataReader = TryGetOrCreateModuleMetaDataReader(method.Type.Module);
+            ModuleMetadataReader? metadataReader = null;
+
+            ClrType? methodType = ClrExtensions.GetRealClrTypeFromMethod(method);
+
+            if (methodType != null)
+                metadataReader = TryGetOrCreateModuleMetaDataReader(methodType.Module);
             MethodDefinition? methodDefinition = null;
+
             _ = metadataReader?.TryGetMetaData(method.MetadataToken, out methodDefinition);
             List<string> paramNames = [];
 
-            if (methodDefinition.HasValue && metadataReader != null)
+            try
             {
-                // Handle method Parameters Correctly
-                foreach (ParameterHandle mparam in methodDefinition.Value.GetParameters())
+                if (methodDefinition.HasValue && metadataReader != null)
                 {
-                    Parameter? _param = metadataReader.GetDefinitionFromHandle<Parameter>(mparam);
-                    if (_param.HasValue)
+                    // Handle method Parameters Correctly
+                    foreach (ParameterHandle mparam in methodDefinition.Value.GetParameters())
                     {
-                        string paramName = metadataReader.GetStringFromHandle(_param.Value.Name);
-                        if (!string.IsNullOrEmpty(paramName))
-                            paramNames.Insert(_param.Value.SequenceNumber - 1, paramName);
-                        else
-                            paramNames.Insert(_param.Value.SequenceNumber - 1, "<Unknown>");
+                        Parameter? _param = metadataReader.GetDefinitionFromHandle<Parameter>(mparam);
+                        if (_param.HasValue)
+                        {
+                            string paramName = metadataReader.GetStringFromHandle(_param.Value.Name);
+                            int index = _param.Value.SequenceNumber - 1;
+                            if (index < 0)
+                                break; // Failed to get parameters
+
+                            if (!string.IsNullOrEmpty(paramName))
+                                paramNames.Insert(index, paramName);
+                            else
+                                paramNames.Insert(index, "<Unknown>");
+                        }
                     }
                 }
+            }
+            catch (Exception ex)
+            {
+#if DEBUG
+                Logger.LogException(ex);
+#endif
             }
 
             var methodParams = MethodSignatureParser.ParseSignature(method.Signature ?? string.Empty);
@@ -1379,6 +1434,8 @@ namespace DotNetDataCollectorEx
             }
             foreach (ClrObject obj in inspector.EnumerateObjectsOfType(type))
             {
+                if (obj.IsFree || !obj.IsValid)
+                    continue;
                 WriteQword(obj.Address);
                 WriteQword(obj.Size);
             }
@@ -1706,6 +1763,16 @@ namespace DotNetDataCollectorEx
                 WriteDword(uint.MaxValue);
                 return;
             }
+            if (!MethodSignatureParser.IsValidNamespaceClassName(fullClassName))
+            {
+                WriteDword(uint.MaxValue);
+                return;
+            }
+            if (!MethodSignatureParser.IsValidMethodName(methodName))
+            {
+                WriteDword(uint.MaxValue);
+                return;
+            }
 
             ClrType[] types = inspector.GetModule(hModule) != null ? [.. inspector.EnumerateTypes(hModule)] : [.. inspector.EnumerateTypes()];
             ClrType? foundType = null;
@@ -1754,7 +1821,8 @@ namespace DotNetDataCollectorEx
             ClrType? foundType = null;
 
             string fullTypeName = MethodSignatureParser.MethodSignatureGetFullTypeName(methodSignature);
-            if (string.IsNullOrEmpty(fullTypeName))
+
+            if (!MethodSignatureParser.IsValidNamespaceClassName(fullTypeName))
             {
                 WriteDword(uint.MaxValue);
                 return;
@@ -1796,7 +1864,7 @@ namespace DotNetDataCollectorEx
                 return;
             }
 
-            if (string.IsNullOrEmpty(fullClassName))
+            if (!MethodSignatureParser.IsValidNamespaceClassName(fullClassName))
             {
                 WriteDword(uint.MaxValue);
                 return;

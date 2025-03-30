@@ -12,7 +12,7 @@ namespace DotNetDataCollectorEx
     {
         private const ushort PipeMajorVersion = 3; // Newer versions mean possibly breaking changes.
 
-        private const ushort PipeMinorVersion = 0; // Newer versions might be new functions for example, but no breaking changes to older Versions.
+        private const ushort PipeMinorVersion = 2; // Newer versions might be new functions for example, but no breaking changes to older Versions.
 
         private const uint PipeVersion = (uint)PipeMajorVersion << 16 | PipeMinorVersion;
 
@@ -94,6 +94,10 @@ namespace DotNetDataCollectorEx
             CMD_FINDMETHOD = 47,
             CMD_FINDMETHODBYDESC = 48,
             CMD_FINDCLASS = 49,
+            CMD_CLASSGETMODULE = 50,
+            CMD_FINDMODULE = 51,
+            CMD_METHODGETMODULE = 52,
+            CMD_GETMODULEBYHANDLE = 53,
         }
 
         [Flags]
@@ -316,6 +320,7 @@ namespace DotNetDataCollectorEx
         {
             WriteDword((uint)type.MetadataToken);
             WriteQword(type.MethodTable);
+            WriteQword(type.Module.Address);
             WriteDword((uint)type.ElementType);
             WriteDword((uint)type.TypeAttributes);
             WriteBool(type.IsEnum);
@@ -354,7 +359,17 @@ namespace DotNetDataCollectorEx
             foreach (ClrInstanceField iField in instanceFields)
             {
                 WriteDword((uint)iField.Token); // fieldToken
-                WriteDword((uint)iField.Size);
+                try
+                {
+                    WriteDword((uint)iField.Size);
+                } catch (Exception ex)
+                {
+#if DEBUG
+                    Logger.LogException(ex);
+#endif
+                    WriteDword(0); // Seems to fail for nullable types...
+                }
+
                 WriteDword((uint)iField.Offset + (uint)nint.Size); // fieldOffset / Add Pointer Size because of Method Table Pointer
                 WriteDword((uint)iField.ElementType); // fieldType
                 WriteDword((uint)iField.Attributes); // fieldAttributes
@@ -370,7 +385,17 @@ namespace DotNetDataCollectorEx
             foreach (ClrStaticField sField in staticFields)
             {
                 WriteDword((uint)sField.Token); // fieldToken
-                WriteDword((uint)sField.Size);
+                try
+                {
+                    WriteDword((uint)sField.Size);
+                }
+                catch (Exception ex)
+                {
+#if DEBUG
+                    Logger.LogException(ex);
+#endif
+                    WriteDword(0); // Seems to fail for nullable types...
+                }
                 WriteDword((uint)sField.Offset); // fieldOffset
                 WriteDword((uint)sField.ElementType); // fieldType
                 WriteDword((uint)sField.Attributes); // fieldAttributes
@@ -404,6 +429,8 @@ namespace DotNetDataCollectorEx
             ILInfo? ilInfo = method.GetILInfo();
             WriteDword((uint)method.MetadataToken);
             WriteQword(method.MethodDesc); // MethodDesc/MethodHandle
+            WriteQword(method.Type.MethodTable);
+            WriteQword(method.Type.Module.Address);
             WriteUTF16String(method.Name ?? string.Empty);
             WriteDword((uint)method.Attributes);
             WriteQword(method.NativeCode != ulong.MaxValue ? method.NativeCode : 0);
@@ -1883,6 +1910,90 @@ namespace DotNetDataCollectorEx
             WriteDword(uint.MaxValue);
         }
 
+        private void ClassGetModule()
+        {
+            ulong hType = ReadQword();
+
+            if (inspector.ClrRuntime == null)
+            {
+                WriteQword(ulong.MaxValue);
+                return;
+            }
+
+            ClrType? type = inspector.GetType(hType);
+
+            if (type == null)
+            {
+                WriteQword(ulong.MaxValue);
+                return;
+            }
+            SendModule(type.Module);
+        }
+
+        private void FindModule()
+        {
+            string moduleName = ReadUTF16String();
+            bool caseSensitive = ReadBool();
+
+            if (inspector.ClrRuntime == null)
+            {
+                WriteQword(ulong.MaxValue);
+                return;
+            }
+
+            ClrModule? module = inspector.FindModule(null, moduleName, caseSensitive);
+
+            if (module == null)
+            {
+                WriteQword(ulong.MaxValue);
+                return;
+            }
+
+            SendModule(module);
+        }
+
+        private void MethodGetModule()
+        {
+            ulong hMethod = ReadQword();
+
+            if (inspector.ClrRuntime == null)
+            {
+                WriteQword(ulong.MaxValue);
+                return;
+            }
+
+            ClrMethod? method = inspector.GetMethod(hMethod);
+
+            if (method == null)
+            {
+                WriteQword(ulong.MaxValue);
+                return;
+            }
+
+            SendModule(method.Type.Module);
+        }
+
+        private void GetModuleByHandle()
+        {
+            ulong hModule = ReadQword();
+
+            if (inspector.ClrRuntime == null)
+            {
+                WriteQword(ulong.MaxValue);
+                return;
+            }
+
+            ClrModule? module = inspector.GetModule(hModule);
+
+            if (module == null)
+            {
+                WriteQword(ulong.MaxValue);
+                return;
+            }
+
+            SendModule(module);
+        }
+
         #endregion
 
         private void RunExLoopStub()
@@ -2169,6 +2280,18 @@ namespace DotNetDataCollectorEx
                         break;
                     case (byte)Commands.CMD_FINDCLASS:
                         FindClass();
+                        break;
+                    case (byte)Commands.CMD_CLASSGETMODULE:
+                        ClassGetModule();
+                        break;
+                    case (byte)Commands.CMD_FINDMODULE:
+                        FindModule();
+                        break;
+                    case (byte)Commands.CMD_METHODGETMODULE:
+                        MethodGetModule();
+                        break;
+                    case (byte)Commands.CMD_GETMODULEBYHANDLE:
+                        GetModuleByHandle();
                         break;
                     default:
                         Logger.LogWarning($"Invalid Command send over pipe: '{command}'");

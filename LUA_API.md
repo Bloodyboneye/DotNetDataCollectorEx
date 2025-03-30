@@ -381,6 +381,8 @@ Returns a table that contains all of the methods inside the type
 - A table containing information about all of the methods inside the type
   - `MethodToken` (number): The token of the Method
   - `hMethod` (number): The MethodDesc of the Method
+  - `hType` (number): The MethodTable/TypeHandle of the type the method is inside of
+  - `hModule` (number): The handle/address of the Module the method is inside of
   - `Name` (string): The name of the Method
   - `Attributes` (number): The attributes of the Method
   - `NativeCode` (number): The address of where the compiled code of the method is located. Or 0 if it hasn't been compiled yet
@@ -435,6 +437,7 @@ Returns a table that contains information about the Object if the address is ins
   - `Type` (table): A table containing information about the Objects type
     - `TypeToken` (number): The token of the type
     - `hType` (number): The MethodTable/TypeHandle of the type
+    - `hModule` (number): The handle/address of the Module the type is inside of
     - `ElementType` (number): The Element Type of the type
     - `Name` (string): The name of the Type
     - `IsArray` (boolean): True if the type is an array type
@@ -496,6 +499,7 @@ Returns a table that contains information about all of the allocated Objects
   - `Type` (table): A table containing information about the Objects type
     - `TypeToken` (number): The token of the type
     - `hType` (number): The MethodTable/TypeHandle of the type
+    - `hModule` (number): The handle/address of the Module the type is inside of
     - `ElementType` (number): The Element Type of the type
     - `Name` (string): The name of the Type
     - `IsArray` (boolean): True if the type is an array type
@@ -556,6 +560,7 @@ Returns a table that contains information about the type
 - A table containing information about the address
   - `TypeToken` (number): The token of the type
   - `hType` (number): The MethodTable/TypeHandle of the type
+  - `hModule` (number): The handle/address of the Module the type is inside of
   - `ElementType` (number): The Element Type of the type
   - `Name` (string): The name of the Type
   - `IsArray` (boolean): True if the type is an array type
@@ -660,6 +665,7 @@ Returns a table that contains information about the type | Does the same as `Get
 - A table containing information about the address
   - `TypeToken` (number): The token of the type
   - `hType` (number): The MethodTable/TypeHandle of the type
+  - `hModule` (number): The handle/address of the Module the type is inside of
   - `ElementType` (number): The Element Type of the type
   - `Name` (string): The name of the Type
   - `IsArray` (boolean): True if the type is an array type
@@ -803,6 +809,8 @@ Returns a table that contains information about the method
 - A table containing information about the method
   - `MethodToken` (number): The token of the Method
   - `hMethod` (number): The MethodDesc of the Method
+  - `hType` (number): The MethodTable/TypeHandle of the type the method is inside of
+  - `hModule` (number): The handle/address of the Module the method is inside of
   - `Name` (string): The name of the Method
   - `Attributes` (number): The attributes of the Method
   - `NativeCode` (number): The address of where the compiled code of the method is located. Or 0 if it hasn't been compiled yet
@@ -833,6 +841,8 @@ This can be anywhere inside a method in memory. But must be inside a method and 
 - A table containing information about the method
   - `MethodToken` (number): The token of the Method
   - `hMethod` (number): The MethodDesc of the Method
+  - `hType` (number): The MethodTable/TypeHandle of the type the method is inside of
+  - `hModule` (number): The handle/address of the Module the method is inside of
   - `Name` (string): The name of the Method
   - `Attributes` (number): The attributes of the Method
   - `NativeCode` (number): The address of where the compiled code of the method is located. Or 0 if it hasn't been compiled yet
@@ -866,6 +876,7 @@ For valid **Element Types** see the `ClrElementType` Table at the Top of the `Do
 - A table containing information about the `elementType` or `specialType`
   - `TypeToken` (number): The token of the type
   - `hType` (number): The MethodTable/TypeHandle of the type
+  - `hModule` (number): The handle/address of the Module the type is inside of
   - `ElementType` (number): The Element Type of the type
   - `Name` (string): The name of the Type
   - `IsArray` (boolean): True if the type is an array type
@@ -1121,6 +1132,8 @@ The fullClassName should be: "MyNameSpace.Foo" and the methodName should be "Bar
 - A table containing information about the method
   - `MethodToken` (number): The token of the Method
   - `hMethod` (number): The MethodDesc of the Method
+  - `hType` (number): The MethodTable/TypeHandle of the type the method is inside of
+  - `hModule` (number): The handle/address of the Module the method is inside of
   - `Name` (string): The name of the Method
   - `Attributes` (number): The attributes of the Method
   - `NativeCode` (number): The address of where the compiled code of the method is located. Or 0 if it hasn't been compiled yet
@@ -1154,6 +1167,8 @@ The `methodSignature` should look something like this: "MyNameSpace.Foo.Bar(Syst
 - A table containing information about the method
   - `MethodToken` (number): The token of the Method
   - `hMethod` (number): The MethodDesc of the Method
+  - `hType` (number): The MethodTable/TypeHandle of the type the method is inside of
+  - `hModule` (number): The handle/address of the Module the method is inside of
   - `Name` (string): The name of the Method
   - `Attributes` (number): The attributes of the Method
   - `NativeCode` (number): The address of where the compiled code of the method is located. Or 0 if it hasn't been compiled yet
@@ -1187,6 +1202,7 @@ The `fullClassName` should look like this: "MyNameSpace.Foo" if it is a nested c
 - A table containing information about the class
   - `TypeToken` (number): The token of the type
   - `hType` (number): The MethodTable/TypeHandle of the type
+  - `hModule` (number): The handle/address of the Module the type is inside of
   - `ElementType` (number): The Element Type of the type
   - `Name` (string): The name of the Type
   - `IsArray` (boolean): True if the type is an array type
@@ -1233,6 +1249,119 @@ local typeData = collectorEx.FindClass(nil, 'MyNameSpace.Foo', true)
 print("Type Token is " .. typeData.TypeToken)
 ```
 
+### `GetModuleFromType(hType)`
+**Description**
+
+Returns a table that contains information about the module the type is inside of
+
+**Parameters:**
+- `hType` (number): The MethodTable/TypeHandle of the type
+
+**Returns:**
+- A table containing information about the module the type is loaded inside of
+  - `hModule` (number): The handle/address of the Module
+  - `hAppDomain` (number): The handle/address of the AppDomain the Module is loaded in
+  - `ImageBase` (number): The address of where the Module is loaded in memory at, might be 0 when it is not a Module loaded from Disc?
+  - `Size` (number): The size of the Module in Memory
+  - `MetaDataAddress` (number): The address of the MetaData -> This is the address of the .net MetaData Header inside the Module
+  - `MetaDataLength` (number): The size of the MetaData
+  - `Name` (string): The name of the Module
+  - `AssemblyAddress` (number): The address of the Assembly the Module is inside of
+  - `AssemblyName` (string): The name of the Assembly
+  - `Layout` (number): The `layout` of the Module
+  - `IsDynamic` (boolean): True if the module is dynamic
+
+**Usage:**
+```lua
+local m = collectorEx.GetModuleFromType(myType.hType)
+print("Module Name is " .. m.Name)
+```
+
+### `FindModule(moduleName, caseSensitive)`
+**Description**
+
+Returns a table that contains information about the found module
+
+**Parameters:**
+- moduleName (string): The modules name, can in some cases be the full file path. But will always work with the modules name and file name
+- (OPTIONAL) caseSensitive (boolean): If this is true `moduleName` is case sensitive.
+
+**Returns:**
+- A table containing information about the found module
+  - `hModule` (number): The handle/address of the Module
+  - `hAppDomain` (number): The handle/address of the AppDomain the Module is loaded in
+  - `ImageBase` (number): The address of where the Module is loaded in memory at, might be 0 when it is not a Module loaded from Disc?
+  - `Size` (number): The size of the Module in Memory
+  - `MetaDataAddress` (number): The address of the MetaData -> This is the address of the .net MetaData Header inside the Module
+  - `MetaDataLength` (number): The size of the MetaData
+  - `Name` (string): The name of the Module
+  - `AssemblyAddress` (number): The address of the Assembly the Module is inside of
+  - `AssemblyName` (string): The name of the Assembly
+  - `Layout` (number): The `layout` of the Module
+  - `IsDynamic` (boolean): True if the module is dynamic
+
+**Usage:**
+```lua
+local m = collectorEx.FindModule('mymodule', false)
+print("Module Assembly Name is " .. m.AssemblyName)
+```
+
+### `GetModuleFromMethod(hMethod)`
+**Description**
+
+Returns a table that contains information about the module the method is inside of
+
+**Parameters:**
+- `hMethod` (number): The MethodDesc of the Method
+
+**Returns:**
+- A table containing information about the module the module is loaded inside of
+  - `hModule` (number): The handle/address of the Module
+  - `hAppDomain` (number): The handle/address of the AppDomain the Module is loaded in
+  - `ImageBase` (number): The address of where the Module is loaded in memory at, might be 0 when it is not a Module loaded from Disc?
+  - `Size` (number): The size of the Module in Memory
+  - `MetaDataAddress` (number): The address of the MetaData -> This is the address of the .net MetaData Header inside the Module
+  - `MetaDataLength` (number): The size of the MetaData
+  - `Name` (string): The name of the Module
+  - `AssemblyAddress` (number): The address of the Assembly the Module is inside of
+  - `AssemblyName` (string): The name of the Assembly
+  - `Layout` (number): The `layout` of the Module
+  - `IsDynamic` (boolean): True if the module is dynamic
+
+**Usage:**
+```lua
+local m = collectorEx.GetModuleFromType(myMethod.hMethod)
+print("Module Name is " .. m.Name)
+```
+
+### `GetModuleFromHandle(hModule)`
+**Description**
+
+Returns a table that contains information about the module
+
+**Parameters:**
+- `hModule` (number): The handle/address of the Module
+
+**Returns:**
+- A table containing information about the module the module
+  - `hModule` (number): The handle/address of the Module
+  - `hAppDomain` (number): The handle/address of the AppDomain the Module is loaded in
+  - `ImageBase` (number): The address of where the Module is loaded in memory at, might be 0 when it is not a Module loaded from Disc?
+  - `Size` (number): The size of the Module in Memory
+  - `MetaDataAddress` (number): The address of the MetaData -> This is the address of the .net MetaData Header inside the Module
+  - `MetaDataLength` (number): The size of the MetaData
+  - `Name` (string): The name of the Module
+  - `AssemblyAddress` (number): The address of the Assembly the Module is inside of
+  - `AssemblyName` (string): The name of the Assembly
+  - `Layout` (number): The `layout` of the Module
+  - `IsDynamic` (boolean): True if the module is dynamic
+
+**Usage:**
+```lua
+local m = collectorEx.GetModuleFromHandle(myType.hModule)
+print("Module Name is " .. m.Name)
+```
+
 ### `ReplaceLegacyDataCollector(restore)`
 **Description:**
 
@@ -1267,6 +1396,441 @@ collectorEx.ReplaceLegacyDataCollector(false)
 ```lua
 local collectorEx = getDotNetDataCollectorEx()
 collectorEx.RegisterCallbacks(false)
+```
+
+### `InitSymbolsForStaticFields(hModule, hType, includeTypeName, includeFullTypeName)`
+**Description**
+
+- Registers symbols for all static Fields inside of the Class(`hType`) or Module(`hModule`) if `hType` is null
+- If `includeTypeName` is true and `includeFullTypeName` is not then it will put the Class name in front of the static fields name as the symbols name
+- If `includeFullTypeName` is true then it will put the Full Class Name (NameSpace.ClassName) in front of the static fields name as the symbols name
+- Example: `MyNameSpace.MyClass` -> Has a Static Field called `MyPlayer`
+- `includeTypeName` = **true** and `includeFullTypeName` = **false** -> `Symbol: MyClass.MyPlayer`
+- `includeTypeName` = **false** and `includeFullTypeName` = **false** -> `Symbol: MyPlayer`
+- `includeFullTypeName` = **true** -> `Symbol: MyNameSpace.MyClass.MyPlayer`
+
+**Parameters:**
+- (OPTIONAL) `hModule` (number): The handle/address of the Module
+- (OPTIONAL) `hType` (number): The MethodTable/TypeHandle of the type
+- (OPTIONAL) `includeTypeName` (boolean): Include the Type Name in the Symbol
+- (OPTIONAL) `includeFullTypeName` (boolean): Include the Full Type Name in the Symbol
+
+**Returns:**
+- Returns true on success, false on failure
+
+**Usage:**
+```lua
+local success = collectorEx.InitSymbolsForStaticFields(nil, myType.hType, nil, true)
+if (success) then
+  print('Success')
+  printf("Address: 0x%X",getAddressSafe('MyNameSpace.MyClass.MyPlayer'))
+else
+  print('Failure')
+end
+```
+
+### `InitSymbolsForInstanceFields(hModule, hType, includeTypeName, includeFullTypeName)`
+**Description**
+
+- Registers symbols for all instance Fields inside of the Class(`hType`) or Module(`hModule`) if `hType` is null
+- If `includeTypeName` is true and `includeFullTypeName` is not then it will put the Class name in front of the instance fields name as the symbols name
+- If `includeFullTypeName` is true then it will put the Full Class Name (NameSpace.ClassName) in front of the instance fields name as the symbols name
+- Example: `MyNameSpace.MyPlayer` -> Has a instance Field called `Health`
+- `includeTypeName` = **true** and `includeFullTypeName` = **false** -> `Symbol: MyPlayer.Health`
+- `includeTypeName` = **false** and `includeFullTypeName` = **false** -> `Symbol: Health`
+- `includeFullTypeName` = **true** -> `Symbol: MyNameSpace.MyPlayer.Health`
+
+**Parameters:**
+- (OPTIONAL) `hModule` (number): The handle/address of the Module
+- (OPTIONAL) `hType` (number): The MethodTable/TypeHandle of the type
+- (OPTIONAL) `includeTypeName` (boolean): Include the Type Name in the Symbol
+- (OPTIONAL) `includeFullTypeName` (boolean): Include the Full Type Name in the Symbol
+
+**Returns:**
+- Returns true on success, false on failure
+
+**Usage:**
+```lua
+local success = collectorEx.InitSymbolsForInstanceFields(nil, myPlayer.hType, nil, true)
+if (success) then
+  print('Success')
+  printf("Health offset inside Player Object: 0x%X",getAddressSafe('MyNameSpace.MyPlayer.Health'))
+else
+  print('Failure')
+end
+```
+
+### `InitSymbolsForAllFields(hModule, hType, includeTypeName, includeFullTypeName)`
+**Description**
+
+- Registers symbols for all Fields inside of the Class(`hType`) or Module(`hModule`) if `hType` is null
+- If `includeTypeName` is true and `includeFullTypeName` is not then it will put the Class name in front of the all fields name as the symbols name
+- If `includeFullTypeName` is true then it will put the Full Class Name (NameSpace.ClassName) in front of the all fields name as the symbols name
+- Example: `MyNameSpace.MyPlayer` -> Has a instance Field called `Health` and a static Field called `CurrentInstance`
+- `includeTypeName` = **true** and `includeFullTypeName` = **false** -> `Symbol: MyPlayer.Health` | `Symbol: MyPlayer.CurrentInstance`
+- `includeTypeName` = **false** and `includeFullTypeName` = **false** -> `Symbol: Health` | `Symbol: CurrentInstance`
+- `includeFullTypeName` = **true** -> `Symbol: MyNameSpace.MyPlayer.Health` | `Symbol: MyNameSpace.MyPlayer.CurrentInstance`
+
+**Parameters:**
+- (OPTIONAL) `hModule` (number): The handle/address of the Module
+- (OPTIONAL) `hType` (number): The MethodTable/TypeHandle of the type
+- (OPTIONAL) `includeTypeName` (boolean): Include the Type Name in the Symbol
+- (OPTIONAL) `includeFullTypeName` (boolean): Include the Full Type Name in the Symbol
+
+**Returns:**
+- Returns true on success, false on failure
+
+**Usage:**
+```lua
+local success = collectorEx.InitSymbolsForAllFields(nil, myPlayer.hType, nil, true)
+if (success) then
+  print('Success')
+  printf("Health offset inside Player Object: 0x%X",getAddressSafe('MyNameSpace.MyPlayer.Health'))
+  printf("Player Current Instance Address: 0x%X", getAddressSafe('MyNameSpace.MyPlayer.CurrentInstance'))
+else
+  print('Failure')
+end
+```
+
+### `CreateDotNetHelperScript()`
+**Description**
+
+- Creates(Allocates) an Auto Assembler section which adds methods that can be called from assembly
+- See [`DotNetHelper Script`](LUA_API.md#dotnethelper-script) for more details and methods to call
+
+**Parameters:**
+- **NONE**
+
+**Returns:**
+- On Success: true
+- On Failure: <1>(boolean) false | <2> (string) The error Message
+
+**Usage:**
+```lua
+local success, err = collectorEx.CreateDotNetHelperScript()
+
+if (success) then
+  print('Success')
+else
+  print('Failure, error: '..err)
+end
+```
+
+---
+
+## Extension Functions:
+- These functions use **Cheat Engine's** `DotNetInterface`
+- Using the functions below will inject the `DotNetInterface` dll into the target!
+
+### `CompileMethod(method)`
+**Description**
+
+- Will try and compile the method and returns its entry point
+
+**Parameters:**
+- method (number or table) This can either be the Method Object returned by methods like `FindMethod` or just the hMethod Handle. It is recommended to pase the method object if available though
+
+
+**Returns:**
+- On Success: <1>(number) The Entry of the Method | If was first compile <2>(number) The address returned when compiling the method, might be different than the actual entry of the method (stub code)
+- On Failure: <1>(nil) | <2> (string) The error Message
+
+**Usage:**
+```lua
+local r1,r2 = collectorEx.CompileMethod(myMethod)
+if (r1) then
+  print('Success')
+  printf('Method Entry Point is: 0x%X',r1)
+  if (r2) then
+    print('Was compiled!')
+    printf('Method Compiled Address is: 0x%X', r2)
+  end
+else
+  print('Failure, Error Message: '..r2)
+end
+```
+
+### `FindMethodAndCompile(hModule, fullClassName, methodName, paramCount, caseSensitive)`
+**Description**
+
+- A combination of [`FindMethod`](LUA_API.md#findmethodhmodule-fullclassname-methodname-paramcount-casesensitive) and [`FindMethod`](LUA_API.md#CompileMethodmethod)
+
+**Parameters:**
+See [`FindMethod`](LUA_API.md#findmethodhmodule-fullclassname-methodname-paramcount-casesensitive)
+
+**Returns:**
+- On Success: <1>(number) The Entry of the Method | If was first compile <2>(number) The address returned when compiling the method, might be different than the actual entry of the method (stub code)
+- On Failure: <1>(nil) | <2> (string) The error Message
+
+**Usage:**
+```lua
+local r1,r2 = collectorEx.FindMethodAndCompileMethod(nil, 'MyNameSpace.MyClass', 'MyMethod', nil, false)
+if (r1) then
+  print('Success')
+  printf('Method Entry Point is: 0x%X',r1)
+  if (r2) then
+    print('Was compiled!')
+    printf('Method Compiled Address is: 0x%X', r2)
+  end
+else
+  print('Failure, Error Message: '..r2)
+end
+```
+
+### `FindMethodByDescCompile(hModule, methodSignature, caseSensitive)`
+**Description**
+
+- A combination of [`FindMethodByDesc`](LUA_API.md#findmethodbydeschmodule-methodsignature-casesensitive) and [`FindMethod`](LUA_API.md#CompileMethodmethod)
+
+**Parameters:**
+See [`FindMethodByDesc`](LUA_API.md#findmethodbydeschmodule-methodsignature-casesensitive)
+
+**Returns:**
+- On Success: <1>(number) The Entry of the Method | If was first compile <2>(number) The address returned when compiling the method, might be different than the actual entry of the method (stub code)
+- On Failure: <1>(nil) | <2> (string) The error Message
+
+**Usage:**
+```lua
+local r1,r2 = collectorEx.FindMethodByDescAndCompileMethod(nil, 'MyNameSpace.MyClass.MyMethod()', false)
+if (r1) then
+  print('Success')
+  printf('Method Entry Point is: 0x%X',r1)
+  if (r2) then
+    print('Was compiled!')
+    printf('Method Compiled Address is: 0x%X', r2)
+  end
+else
+  print('Failure, Error Message: '..r2)
+end
+```
+
+### `RegisterAutoAssemblerCommands(unregister)`
+**Description**
+
+- Will Register Auto Assembler Commands see [`Auto Assembler Commands`](LUA_API.md#Auto-Assembler-Commands)
+
+**Parameters:**
+- (OPTIONAL) `unregister` (boolean): If true it will unregister the auto assembler commands instead
+
+**Returns:**
+- **Nothing**
+
+**Usage:**
+```lua
+collectorEx.RegisterAutoAssemblerCommands()
+```
+
+---
+
+## Auto Assembler Commands:
+
+### `DotNetDefineMethod`
+
+**Description**
+- Works the same a define(symbol,value) but replaces the value passed with the address of the compiled method.
+- Meaning that the value argument must be the Method Description String of the method.
+
+**Usage:**
+```
+DotNetDefineMethod(mydefine,MyNameSpace.MyClass.MyMethod())
+```
+
+---
+
+## DotNetHelper Script:
+- This Script will export (Register) Methods that can be called from assembly
+- All Functions that start with an **M** like `MAllocateString` have to be called from a managed thread!
+ - Use `RunInDomain` or `CreateManagedThread` to call these from unmaged code
+
+### `stdcall int RunInDomain(void* funcToRun, void* userarg)`
+**Description**
+
+- Will run the `funcToRun` address inside of the Default AppDomain.
+- This is useful if you want to call Managed methods from assembly without hooking managed threads.
+- This will also catch managed exceptions and return if it encounters one
+
+**Parameters:**
+- `funcToRun` (void*): The Address of the Method to run the function in
+- `userarg` (void*): The Argument to pass to the `funcToRun` function
+
+**Returns:**
+- (int): [See](https://learn.microsoft.com/en-us/dotnet/framework/unmanaged-api/hosting/iclrruntimehost-executeinappdomain-method#return-value)
+
+**Usage:**
+```
+label(myFunc)
+label(main)
+createthread(main)
+<x64>:
+main:
+sub rsp,28
+mov rcx,myFunc
+mov rdx,0x12345678
+call DotNetHelper.RunInDomain
+add rsp,28
+ret
+
+myFunc:
+sub rsp,28
+<...>
+add rsp,28
+ret
+
+<x86>
+main:
+push 0x12345678
+push myFunc
+call DotNetHelper.RunInDomain
+ret 4
+
+myFunc:
+<...>
+ret 4
+```
+
+### `stdcall HANDLE CreateManagedThread(void* lpStartAddress, void* lpParameter)`
+**Description**
+
+- Will create a new Thread and will run `lpStartAddress` in the Default App Domain
+- **DO NOT** call Exit Thread inside there! Only return from it.
+- This will also catch Managed exceptions and terminate the thread in the case one is thrown
+
+**Parameters:**
+- `lpStartAddress` (void*): The Address of where the thread should be created at
+- `lpParameter` (void*): The Argument passed to `lpStartAddress`
+
+**Returns:**
+- (HANDLE): The handle of the unmanaged thread
+
+**Usage:**
+```
+label(myThradFunc)
+label(main)
+createthread(main)
+<x64>:
+main:
+sub rsp,28
+mov rcx,myThradFunc
+mov rdx,0x12345678
+call DotNetHelper.CreateManagedThread
+add rsp,28
+ret
+
+myThradFunc: // Runs in new Managed Thread
+sub rsp,28
+<...>
+add rsp,28
+ret
+
+<x86>
+main:
+push 0x12345678
+push myThradFunc
+call DotNetHelper.CreateManagedThread
+ret 4
+
+myThradFunc: // Runs in new Managed Thread
+<...>
+ret 4
+```
+
+### `stdcall System.String MAllocateString(int length)`
+**Description**
+
+- Will allocate an empty System.String Object with the specified `length`
+
+**Parameters:**
+- `length` (int): The size of the to string to be allocated
+
+**Returns:**
+- (System.String): The new String object or 0 on failure
+
+**Usage:**
+```
+label(myFunc)
+label(main)
+createthread(main)
+<x64>:
+main:
+sub rsp,28
+mov rcx,myFunc
+mov rdx,0
+call DotNetHelper.RunInDomain
+add rsp,28
+ret
+
+myFunc:
+sub rsp,28
+mov ecx,#100
+call DotNetHelper.MAllocateString
+<...>
+add rsp,28
+ret
+
+<x86>
+main:
+push 0
+push myFunc
+call DotNetHelper.RunInDomain
+ret 4
+
+myFunc:
+push #100
+call DotNetHelper.MAllocateString
+<...>
+ret 4
+```
+
+### `stdcall System.String MCreateString(const char* str)`
+**Description**
+
+- Will allocate a System.String Object from the ansi string `str`
+
+**Parameters:**
+- `str` (const char*): The Address of the 0-Terminated Ansi string to create a System.String Object from
+
+**Returns:**
+- (System.String): The new String object or 0 on failure
+
+**Usage:**
+```
+label(myFunc)
+label(main)
+label(mystring)
+createthread(main)
+
+mystring:
+db 'ThisIsMyString',0
+
+<x64>:
+main:
+sub rsp,28
+mov rcx,myFunc
+mov rdx,0
+call DotNetHelper.RunInDomain
+add rsp,28
+ret
+
+myFunc:
+sub rsp,28
+lea rcx,[mystring]
+call DotNetHelper.MCreateString
+<...>
+add rsp,28
+ret
+
+<x86>
+main:
+push 0
+push myFunc
+call DotNetHelper.RunInDomain
+ret 4
+
+myFunc:
+push mystring
+call DotNetHelper.MCreateString
+<...>
+ret 4
 ```
 
 ---

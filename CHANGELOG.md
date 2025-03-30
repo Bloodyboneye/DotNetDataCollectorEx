@@ -9,6 +9,39 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Added
 - Parsing other Metadata manually to add more functionality
 
+## [2.4.0] - 2025-03-30
+### Added
+- Added Lua function [FindMethod](LUA_API.md#findmethodhmodule-fullclassname-methodname-paramcount-casesensitive)
+- Added Lua function [FindMethodByDesc](LUA_API#findmethodbydeschmodule-methodsignature-casesensitive)
+- Added Lua function [FindClass](LUA_API.md#findclasshmodule-fullclassname-casesensitive)
+- Added Lua function [GetModuleFromType](LUA_API.md#getmodulefromtypehtype)
+- Added Lua function [FindModule](LUA_API.md#findmodulemodulename-casesensitive)
+- Added Lua function [GetModuleFromMethod](LUA_API.md#getmodulefrommethodhmethod)
+- Added Lua function [GetModuleFromHandle](LUA_API.md#getmodulefromhandlehmodule)
+- Added Lua function [InitSymbolsForStaticFields](LUA_API.md#initsymbolsforstaticfieldshmodule-htype-includetypename-includefulltypename)
+- Added Lua function [InitSymbolsForInstanceFields](LUA_API.md#initsymbolsforinstancefieldshmodule-htype-includetypename-includefulltypename)
+- Added Lua function [InitSymbolsForAllFields](LUA_API.md#initsymbolsforallfieldshmodule-htype-includetypename-includefulltypename)
+- Added Lua function [CreateDotNetHelperScript](LUA_API.md#createdotnethelperscript)
+- Added Lua function [CompileMethod](LUA_API.md#compilemethodmethod)
+- Added Lua function [FindMethodAndCompile](LUA_API.md#findmethodandcompilehmodule-fullclassname-methodname-paramcount-casesensitive)
+- Added Lua function [FindMethodByDescAndCompile](LUA_API.md#findmethodbydesccompilehmodule-methodsignature-casesensitive)
+- Added Lua function [RegisterAutoAssemblerCommands](LUA_API.md#registerautoassemblercommandsunregister)
+
+- Added Auto Assembler Command [DotNetDefineMethod](LUA_API.md#dotnetdefinemethod)
+
+- Added Assembly Function [RunInDomain](LUA_API.md#stdcall-int-runindomainvoid-functorun-void-userarg)
+- Added Assembly Function [CreateManagedThread](LUA_API.md#stdcall-handle-createmanagedthreadvoid-lpstartaddress-void-lpparameter)
+- Added Assembly Function [MAllocateString](LUA_API.md#stdcall-systemstring-mallocatestringint-length)
+- Added Assembly Function [MCreateString](LUA_API.md#stdcall-systemstring-mcreatestringconst-char-str)
+
+- Added hType under most Lua functions that return method information
+- Added hModule under most Lua functions that return method information and type information
+
+### Fixes
+- Fixed rare case where getting the field size would crash the DataCollector
+
+---
+
 ## [2.3.0] - 2025-03-14
 ### Changed
 - Added Symbol cache on lua side for caching symbols used by cheat engine.

@@ -1,4 +1,5 @@
 ﻿using Microsoft.Diagnostics.Runtime;
+using Microsoft.Diagnostics.Runtime.AbstractDac;
 using System.Diagnostics;
 using System.Linq;
 using System.Runtime.InteropServices;
@@ -351,7 +352,7 @@ namespace DotNetDataCollectorEx
         public string? DumpModule(ClrModule module, string outputFile)
         {
             EnsureClrRuntimeInitializedOrThrow();
-            if (module.IsDynamic) 
+            if (module.IsDynamic)
                 return "Module can't be dynamic!";
             IntPtr hProcess = IntPtr.Zero;
             try
@@ -382,6 +383,38 @@ namespace DotNetDataCollectorEx
                 if (hProcess != IntPtr.Zero)
                     NativeMethods.CloseHandle(hProcess);
             }
+        }
+
+        public ClrModule? FindModule(ClrAppDomain? domain, string moduleName, bool caseSensitive)
+        {
+            EnsureClrRuntimeInitializedOrThrow();
+
+            foreach (ClrModule module in _clrRuntime!.EnumerateModules())
+            {
+                if (domain != null && module.AppDomain != domain)
+                    continue;
+                if (moduleName.Equals(module.Name, caseSensitive ? StringComparison.Ordinal : StringComparison.OrdinalIgnoreCase))
+                    return module;
+                if (moduleName.Equals(module.AssemblyName, caseSensitive ? StringComparison.Ordinal : StringComparison.OrdinalIgnoreCase))
+                    return module;
+
+                // Check for other cases
+                if (!string.IsNullOrEmpty(module.Name))
+                {
+                    if (module.Name.EndsWith(moduleName, caseSensitive ? StringComparison.Ordinal : StringComparison.OrdinalIgnoreCase))
+                        return module;
+                    else if (moduleName.Equals(Path.GetFileNameWithoutExtension(module.Name), caseSensitive ? StringComparison.Ordinal : StringComparison.OrdinalIgnoreCase))
+                        return module;
+                }
+                if (!string.IsNullOrEmpty(module.AssemblyName))
+                {
+                    if (module.AssemblyName.EndsWith(moduleName, caseSensitive ? StringComparison.Ordinal : StringComparison.OrdinalIgnoreCase))
+                        return module;
+                    else if (moduleName.Equals(Path.GetFileNameWithoutExtension(module.AssemblyName), caseSensitive ? StringComparison.Ordinal : StringComparison.OrdinalIgnoreCase))
+                        return module;
+                }
+            }
+            return null;
         }
 
         //public void Test()

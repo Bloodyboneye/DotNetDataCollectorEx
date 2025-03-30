@@ -46,7 +46,6 @@ namespace DotNetDataCollectorEx
             if (module.ImageBase == 0 || module.Size == 0)
                 throw new InvalidOperationException("Module ImageBase and Size cannot be 0.");
 
-            byte[] moduleBytes = new byte[module.Size];
             int processId = module.AppDomain.Runtime.DataTarget.DataReader.ProcessId;
             nint hProc = NativeMethods.OpenProcess(NativeMethods.PROCESS_VM_READ | NativeMethods.PROCESS_QUERY_INFORMATION, false, processId);
 

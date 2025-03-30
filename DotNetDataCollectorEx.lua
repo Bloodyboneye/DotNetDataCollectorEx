@@ -9,6 +9,7 @@ local StructureDefaultArrayCount = 9
 local pointerSize = targetIs64Bit() and 8 or 4
 
 local symbolCache = {}
+local symbolCacheNames = {}
 
 registerLuaFunctionHighlight("getDotNetDataCollectorEx")
 
@@ -56,7 +57,11 @@ DotNetDataCollectorExCommands = {
     CMD_METHODGETTYPE = 46,
     CMD_FINDMETHOD = 47,
     CMD_FINDMETHODBYDESC = 48,
-    CMD_FINDCLASS = 49
+    CMD_FINDCLASS = 49,
+    CMD_CLASSGETMODULE = 50,
+    CMD_FINDMODULE = 51,
+    CMD_METHODGETMODULE = 52,
+    CMD_GETMODULEBYHANDLE = 53
 }
 
 ClrElementType = {
@@ -139,12 +144,12 @@ local function isValidNamespaceClassName(name)
         return false
     end
 
-    if name:find("[@#$%^&*()%+=/\\,;:%%[%]{}|<>?]") then
+    if name:find("[@#$%^&*()%=/\\,;:%%[%]{}|?]") then
         return false
     end
 
     for part in name:gmatch("[^.]+") do
-        if not part:match("^[A-Za-z_][A-Za-z0-9_]*$") then
+        if not part:match("^[A-Za-z_][A-Za-z0-9_+<>]*$") then
             return false
         end
     end
@@ -155,11 +160,16 @@ end
 local function isValidMethodName(name)
     if not name or name == "" then return false end
 
-    if name:find("[@#$%^&*()%+=/\\,;:%%[%]{}|<>?.]") then
+    if name:find("[@#$%^&*()%+=/\\,;:%%[%]{}|?.]") then
         return false
     end
 
-    return name:match("^[A-Za-z_][A-Za-z0-9_]*$") ~= nil
+    return name:match("^[A-Za-z_<][A-Za-z0-9_<>]*$") ~= nil
+end
+
+local function splitAndCaptureHex(str)
+    local beforeHex, hexValue = str:match("^(.-)%+0?x?([0-9A-Fa-f]+)$")
+    return beforeHex, hexValue
 end
 
 local function dotnetex_readString()
@@ -215,6 +225,37 @@ local function dotnetex_I_splitSymbol(symbol)
     result.classname = classname
     result.namespace = namespace
   
+    return result
+end
+
+local function dotnetex_I_splitFullClassName(fullClassName)
+    local result = {}
+
+    local parts = {}
+
+    for x in string.gmatch(fullClassName, "[^.]+") do
+        table.insert(parts, x)
+    end
+
+    local namespace = ''
+    local classname = ''
+
+    if (#parts > 0) then
+        classname = parts[#parts]
+
+        if (#parts > 1) then
+            for x = 1, #parts - 1 do
+                if (x == 1) then
+                    namespace = parts[x]
+                else
+                    namespace = namespace..'.'..parts[x]
+                end
+            end
+        end
+    end
+    result.classname = classname
+    result.namespace = namespace
+
     return result
 end
 
@@ -364,6 +405,7 @@ local function dotnetex_I_readType()
     end
     r.TypeToken = token
     r.hType = dotnetpipeex.readQword() -- This is either A: The MethodTable or B: The TypeHandle if the Type doesn't have a MethodTable
+    r.hModule = dotnetpipeex.readQword()
     r.ElementType = dotnetpipeex.readDword() -- This is the types element type -> See ClrElementType
     r.TypeAttributes = dotnetpipeex.readDword() -- These are the types attributes -> See <System.Reflection.TypeAttributes>
     r.IsEnum = dotnetpipeex.readByte() ~= 0
@@ -439,6 +481,8 @@ local function dotnetex_I_readMethod()
     r.MethodToken = dotnetpipeex.readDword() -- The metadata token of the method
     if (not r.MethodToken or r.MethodToken == 0xFFFFFFFF) then return {} end
     r.hMethod = dotnetpipeex.readQword() -- The MethodDesc of the method
+    r.hType = dotnetpipeex.readQword() -- This is either A: The MethodTable or B: The TypeHandle if the Type doesn't have a MethodTable
+    r.hModule = dotnetpipeex.readQword()
     r.Name = dotnetex_readString() -- The Name of the Method
     r.Attributes = dotnetpipeex.readDword() -- The Attributes of the Method -> see <System.Reflection.MethodAttributes>
     r.NativeCode = dotnetpipeex.readQword() -- The Address of where the Compiled Code is located
@@ -640,7 +684,7 @@ local function dotnetex_AddressLoopupCallback(address)
         --local class = DotNetDataCollectorEx.GetTypeFromMethod(method.hMethod)
         local name = string.match(method.Signature, "^%s*([^%s%(]+)%s*%(")
         if (name) then
-            name = name:match("%.cc?tor$") and name:gsub("%.%.(c?ctor)$", ":.%1") or name:gsub("(.*)%.", "%1:") -- Replace class.methodname with class:methodname
+            name = name:match("%.cc?tor$") and name:gsub("%.%.(c?ctor)$", "::.%1") or name:gsub("(.*)%.", "%1::") -- Replace class.methodname with class::methodname
             result = result..name
         end
         if (not name or #name == 0) then -- Ignore empty names
@@ -677,26 +721,55 @@ local function dotnetex_SymbolLookupCallback(symbol, recursive)
 
     if (not dotnetpipeex.isValid()) then return nil end
 
+    if (symbolCacheNames[symbol]) then
+        if (symbolCacheNames[symbol] == -1) then return nil end -- Used for Invalid Symbols that were cached
+        return symbolCacheNames[symbol]
+    end
+
+    if (not dotnetpipeex.SymbolLookupEnabled) then return nil end -- Only handle other symbols if RegisterCallbacks is active
+
     if symbol:match('[()%[%]]')~=nil then return nil end --no formulas/indexer
     --print(symbol)
+    if (#symbol == 0) then return nil end
 
     local ss=dotnetex_I_splitSymbol(symbol)
     --print(ss.methodname)
     --print(ss.classname)
     --print(ss.namespace)
+    --print(symbol)
 
-    if (isValidMethodName(ss.methodname)) and (isValidNamespaceClassName(ss.namespace..ss.classname)) then
+    -- handle possible hex offset at the end
+    local mname, offset = splitAndCaptureHex(ss.methodname)
+    if (mname) then ss.methodname = mname end
+    offset = offset and tonumber(offset, 16) or 0
+
+    if (isValidMethodName(ss.methodname)) and (isValidNamespaceClassName(ss.namespace..'.'..ss.classname)) then
         local method=DotNetDataCollectorEx.FindMethod(nil, ss.namespace..'.'..ss.classname, ss.methodname)
         if (method == nil or method.NativeCode == nil) then
             if (recursive) then
                 return nil
             end
+            if (DotNetDataCollectorEx.FindClass(nil, symbol)) then
+                symbolCacheNames[symbol] = -1 -- cache only class as invalid
+                return nil -- Fail if the symbol is only the class name and not a method name
+            end
             DotNetDataCollectorEx.FlushDACCache() -- Flush Cache Because maybe the method hadn't been jitted when collecting info, but has now
             return dotnetex_SymbolLookupCallback(symbol, true)
         end
-
-        return method.NativeCode
+        --[[]
+        if (#method.MethodRegions > 0) then
+            -- Add complete method to symbolCacheNames
+            local baseaddr = method.MethodRegions[1].StartAddress
+            local bsymbol = ss.namespace..'.'..ss.classname..'::'..ss.methodname
+            for i = 0, method.MethodRegions[1].Size -1 do
+                symbolCacheNames[string.format('%s+%X',bsymbol, i)] = baseaddr + i
+            end
+        end
+        ]]
+        symbolCacheNames[symbol] = method.NativeCode + offset
+        return method.NativeCode + offset
     end
+    symbolCacheNames[symbol] = -1
     return nil
 end
 
@@ -742,10 +815,11 @@ local function dotnetex_registerCallbacks(unregister)
                 unregisterAddressLookupCallback(dotnetpipeex.AddressLookupID)
                 dotnetpipeex.AddressLookupID = nil
             end
-            if (dotnetpipeex.SymbolLookupID ~= nil) then
-                unregisterSymbolLookupCallback(dotnetpipeex.SymbolLookupID)
-                dotnetpipeex.SymbolLookupID = nil
-            end
+            dotnetpipeex.SymbolLookupEnabled = false
+            --if (dotnetpipeex.SymbolLookupID ~= nil) then
+            --    unregisterSymbolLookupCallback(dotnetpipeex.SymbolLookupID)
+            --    dotnetpipeex.SymbolLookupID = nil
+            --end
             if (dotnetpipeex.StructureNameLookupID ~= nil) then
                 unregisterStructureNameLookup(dotnetpipeex.StructureNameLookupID)
                 dotnetpipeex.StructureNameLookupID = nil
@@ -760,9 +834,10 @@ local function dotnetex_registerCallbacks(unregister)
         if (dotnetpipeex.AddressLookupID == nil) then
             dotnetpipeex.AddressLookupID = registerAddressLookupCallback(dotnetex_AddressLoopupCallback)
         end
-        if (dotnetpipeex.SymbolLookupID == nil) then
-            dotnetpipeex.SymbolLookupID = registerSymbolLookupCallback(dotnetex_SymbolLookupCallback, slNotSymbol)
-        end
+        dotnetpipeex.SymbolLookupEnabled = true
+        --if (dotnetpipeex.SymbolLookupID == nil) then
+        --    dotnetpipeex.SymbolLookupID = registerSymbolLookupCallback(dotnetex_SymbolLookupCallback, slNotSymbol)
+        --end
         if (dotnetpipeex.StructureNameLookupID == nil) then
             dotnetpipeex.StructureNameLookupID = registerStructureNameLookup(dotnetex_StructureNameLookupCallback)
         end
@@ -772,6 +847,82 @@ local function dotnetex_registerCallbacks(unregister)
         return true
     end
     return false
+end
+
+local function dotnetex_initSymbolsForFields(hModule, hType, includeTypeName, includeFullTypeName, includeStaticFields, includeInstanceFields)
+    if (not dotnetpipeex.AttachedEx) then return false end
+    if (not dotnetpipeex.isValid()) then return false end
+    if (not includeStaticFields and not includeInstanceFields) then return false end
+    local baseName = ''
+    local sname
+    local typeinfo
+    if (hType) then
+        typeinfo = DotNetDataCollectorEx.GetTypeDefData(hType)
+        if (typeinfo) then
+            sname = dotnetex_I_splitFullClassName(typeinfo.Name)
+            if (includeFullTypeName) then
+                baseName = sname.namespace .. '.' .. sname.classname .. '.'
+            elseif (includeTypeName) then
+                baseName = sname.classname .. '.'
+            end
+
+            if (includeStaticFields and typeinfo.StaticFields) then
+                for _,v in ipairs(typeinfo.StaticFields) do
+                    if (v.Address and v.Address ~= 0) then
+                        symbolCache[v.Address] = {s = baseName..v.Name}
+                        symbolCacheNames[baseName..v.Name] = v.Address
+                        symbolCacheNames[typeinfo.Name..'.'..'StaticFields'] = v.Address - v.Offset
+                        --print('Symbol added: '..baseName..v.Name)
+                    end
+                end
+            end
+            if (includeInstanceFields and typeinfo.InstanceFields) then
+                for _,v in ipairs(typeinfo.InstanceFields) do
+                    if (v.Offset) then
+                        -- Don't add it to the symbolCache because we don't want offsets to be used in memory view or other places only by the Symbol lookup
+                        symbolCacheNames[baseName..v.Name] = v.Offset
+                    end
+                end
+            end
+            return true
+        end
+        return false
+    end
+
+    local types = DotNetDataCollectorEx.EnumTypeDefs(hModule) -- Get all Types in Module or all modules
+    if (not types) then return false end
+
+    for _,v in ipairs(types) do
+        typeinfo = DotNetDataCollectorEx.GetTypeDefData(v.hType)
+        if (typeinfo) then
+            baseName = ''
+            sname = dotnetex_I_splitFullClassName(typeinfo.Name)
+            if (includeFullTypeName) then
+                baseName = sname.namespace .. '.' .. sname.classname .. '.'
+            elseif (includeTypeName) then
+                baseName = sname.classname .. '.'
+            end
+
+            if (includeStaticFields and typeinfo.StaticFields) then
+                for _,k in ipairs(typeinfo.StaticFields) do
+                    if (k.Address and k.Address ~= 0) then
+                        symbolCache[k.Address] = {s = baseName..k.Name}
+                        symbolCacheNames[baseName..k.Name] = k.Address
+                        --print('Symbol added: '..baseName..k.Name)
+                        symbolCacheNames[typeinfo.Name..'.'..'StaticFields'] = k.Address - k.Offset
+                    end
+                end
+            end
+            if (includeInstanceFields and typeinfo.InstanceFields) then
+                for _,k in ipairs(typeinfo.InstanceFields) do
+                    if (k.Offset) then
+                        symbolCacheNames[baseName..k.Name] = k.Offset
+                    end
+                end
+            end
+        end
+    end
+    return true
 end
 
 local function dotnetex_closePipe()
@@ -1722,6 +1873,65 @@ function DotNetDataCollectorEx.FindClass(hModule, fullClassName, caseSensitive)
     return r
 end
 
+function DotNetDataCollectorEx.GetModuleFromType(hType)
+    if (not dotnetpipeex.AttachedEx) then return nil end
+    if (not dotnetpipeex.isValid()) then return {} end
+
+    dotnetpipeex.lock()
+    dotnetpipeex.writeByte(commands.CMD_CLASSGETMODULE)
+    dotnetpipeex.writeQword(hType)
+
+    local r = dotnetex_I_readModule()
+
+    dotnetpipeex.unlock()
+    return r
+end
+
+function DotNetDataCollectorEx.FindModule(moduleName, caseSensitive)
+    if (not dotnetpipeex.AttachedEx) then return nil end
+    if (not dotnetpipeex.isValid()) then return {} end
+
+    if (type(moduleName) ~= "string") then return {} end
+
+    dotnetpipeex.lock()
+    dotnetpipeex.writeByte(commands.CMD_FINDMODULE)
+    dotnetex_writeString(moduleName)
+    dotnetpipeex.writeByte(caseSensitive and 1 or 0)
+
+    local r = dotnetex_I_readModule()
+
+    dotnetpipeex.unlock()
+    return r
+end
+
+function DotNetDataCollectorEx.GetModuleFromMethod(hMethod)
+    if (not dotnetpipeex.AttachedEx) then return nil end
+    if (not dotnetpipeex.isValid()) then return {} end
+
+    dotnetpipeex.lock()
+    dotnetpipeex.writeByte(commands.CMD_METHODGETMODULE)
+    dotnetpipeex.writeQword(hMethod)
+
+    local r = dotnetex_I_readModule()
+
+    dotnetpipeex.unlock()
+    return r
+end
+
+function DotNetDataCollectorEx.GetModuleFromHandle(hModule)
+    if (not dotnetpipeex.AttachedEx) then return nil end
+    if (not dotnetpipeex.isValid()) then return {} end
+
+    dotnetpipeex.lock()
+    dotnetpipeex.writeByte(commands.CMD_GETMODULEBYHANDLE)
+    dotnetpipeex.writeQword(hModule)
+
+    local r = dotnetex_I_readModule()
+
+    dotnetpipeex.unlock()
+    return r
+end
+
 function DotNetDataCollectorEx.ReplaceLegacyDataCollector(restore) -- Will replace the getDotNetDataCollector() function with a new one - if restore is set then it will restore the function instead
     if (restore) then
         if (DotNetDataCollectorEx.IsLegacyOverwritten) then
@@ -1780,6 +1990,668 @@ function DotNetDataCollectorEx.RegisterCallbacks(unregister)
     return dotnetex_registerCallbacks(unregister)
 end
 
+function DotNetDataCollectorEx.InitSymbolsForStaticFields(hModule, hType, includeTypeName, includeFullTypeName)
+    return dotnetex_initSymbolsForFields(hModule, hType, includeTypeName, includeFullTypeName, true, false)
+end
+
+function DotNetDataCollectorEx.InitSymbolsForInstanceFields(hModule, hType, includeTypeName, includeFullTypeName)
+    return dotnetex_initSymbolsForFields(hModule, hType, includeTypeName, includeFullTypeName, false, true)
+end
+
+function DotNetDataCollectorEx.InitSymbolsForAllFields(hModule, hType, includeTypeName, includeFullTypeName)
+    return dotnetex_initSymbolsForFields(hModule, hType, includeTypeName, includeFullTypeName, true, true)
+end
+
+-- Extensions
+local extensions_unloadDIAU = false -- 'unloadDotNetInteraceAfterUse'
+local extensions_hideDIAU = true
+local extensions_dotnetpipe
+local extensions_dotnetpipeWasOn
+
+local function dotnet_disconnectex(onlyHide)
+    if dotnetpipe and not onlyHide then
+        extensions_dotnetpipe = nil
+        dotnetpipe.lock()
+        dotnetpipe.writeByte(DOTNETCMD_EXIT)
+        dotnetpipe.unlock()
+  
+        dotnetpipe.destroy()
+    end
+    dotnetpipe = nil
+end
+
+local function dotnet_getModuleIDEx(modulename)
+    if dotnetmodulelist==nil then
+      dotnet_initModuleList()
+      
+      if dotnetmodulelist==nil then return end
+    end
+    
+    local m=dotnetmodulelist[modulename]
+    if m then
+      return m.Index-1
+    else
+      for i=1,#dotnetmodulelist do
+        if dotnetmodulelist[i].ScopeName==modulename then
+          return i-1
+        end
+      
+        if extractFileNameWithoutExt(dotnetmodulelist[i].ScopeName)==modulename then
+          return i-1
+        end
+        
+        if extractFileNameWithoutExt(modulename)==dotnetmodulelist[i].ScopeName then
+          return i-1
+        end
+      end
+    end
+end
+
+local function dotnet_usingpipe(state)
+    if (state) then
+        dotnetpipeex.lock()
+        extensions_dotnetpipeWasOn = false
+        if (not dotentpipe and extensions_dotnetpipe) then
+            dotnetpipe = extensions_dotnetpipe
+            if (not dotnetpipe.isValid()) then LaunchDotNetInterface() end
+        elseif (dotnetpipe and dotnetpipe.isValid()) then extensions_dotnetpipeWasOn = true else LaunchDotNetInterface() end
+        extensions_dotnetpipe = dotnetpipe
+    else
+        if (not extensions_dotnetpipeWasOn and (extensions_unloadDIAU or extensions_hideDIAU)) then dotnet_disconnectex(extensions_hideDIAU) end
+        dotnetpipeex.unlock()
+    end
+end
+
+function DotNetDataCollectorEx.CompileMethod(method) --dontTraverseJumps
+    if (not dotnetpipeex.AttachedEx) then return nil, 'DotNetDataCollectorEx not attached in EX Mode' end
+    if (not dotnetpipeex.isValid()) then return nil, 'DotNetDataCollectorEx not Valid' end
+    -- method can be the method or the hMethod
+    if (not method) then return nil, 'Invalid Method' end
+    if (type(method) ~= "table") then
+        method = DotNetDataCollectorEx.GetMethodInfo(method)
+        if (not method) then return nil, 'Invalid Method' end
+    end
+    if (method.NativeCode and method.NativeCode ~= 0) then return method.NativeCode end -- Method has already been compiled
+
+    if (not method.hMethod or not method.MethodToken) then return nil, 'Invalid Method' end
+
+    local module = DotNetDataCollectorEx.GetModuleFromMethod(method.hMethod)
+    if (not module or not module.Name) then
+        -- GetModuleFromMethod seems to sometimes fail
+        module = DotNetDataCollectorEx.GetModuleFromHandle(method.hModule)
+    end
+    if (not module or not module.Name) then return nil, 'Invalid Module' end
+
+    dotnet_usingpipe(true)
+    local moduleid = dotnet_getModuleIDEx(module.Name)
+    if (not moduleid) then
+        dotnet_usingpipe(false)
+        return nil, 'Failed to get Module ID'
+    end
+    local result = dotnet_getMethodEntryPoint(moduleid,method.MethodToken)
+    dotnet_usingpipe(false)
+    if (result == nil) then return nil,'Failed to compile Method' end
+    --if (not dontTraverseJumps) then
+    --    while(readBytes(result,1,false) == 0xE9) do
+    --        -- Compiled method starts with a Jump to said method, define the right method - This will be the wrong one if the method has been hooked, which is unlikly if it hasn't been compiled yet
+    --        local jmpoffset = signExtend(readInteger(result+1),31)
+    --        result = result+jmpoffset+5
+    --    end
+    --end
+    DotNetDataCollectorEx.FlushDACCache()
+    local result2
+    local m = DotNetDataCollectorEx.GetMethodInfo(method.hMethod)
+    if (m and m.NativeCode) then
+        result2 = result
+        result = m.NativeCode
+    end
+    return result, result2
+end
+
+function DotNetDataCollectorEx.FindMethodAndCompile(hModule, fullClassName, methodName, paramCount, caseSensitive)
+    local method = DotNetDataCollectorEx.FindMethod(hModule, fullClassName, methodName, paramCount, caseSensitive)
+    if (not method or not method.MethodToken) then return nil, 'Failed to find Method' end
+    return DotNetDataCollectorEx.CompileMethod(method)
+end
+
+function DotNetDataCollectorEx.FindMethodByDescAndCompile(hModule, methodSignature, caseSensitive)
+    local method = DotNetDataCollectorEx.FindMethodByDesc(hModule, methodSignature, caseSensitive)
+    if (not method or not method.MethodToken) then return nil, 'Failed to find Method' end
+    return DotNetDataCollectorEx.CompileMethod(method)
+end
+
+local function DotNetDefineMethodAA(parameters,syntaxcheckonly)
+    if (not dotnetpipeex.AttachedEx) then return nil, 'DotNetDataCollectorEx not being used' end
+    if (not dotnetpipeex.isValid()) then return nil, 'DotNetDataCollectorEx pipe invalid' end
+    local label,addrstring = string.split(parameters,',')
+    label = label:trim()
+    addrstring = addrstring:trim()
+    local code,err = DotNetDataCollectorEx.FindMethodByDescAndCompile(nil, addrstring, false)
+    if (code == nil) then return nil,err end
+    return string.format('define(%s,%X)',label,code)
+end
+
+function DotNetDataCollectorEx.RegisterAutoAssemblerCommands(unregister)
+    if (unregister) then
+        unregisterAutoAssemblerCommand('DotNetDefineMethod')
+    else
+        registerAutoAssemblerCommand('DotNetDefineMethod', DotNetDefineMethodAA)
+    end
+end
+
+local dotnetHelperScriptProcId
+
+function DotNetDataCollectorEx.CreateDotNetHelperScript()
+    if (dotnetHelperScriptProcId and dotnetHelperScriptProcId == getOpenedProcessID()) then return true end -- Already loaded
+    local DotNetHelperScriptTemp = [==[
+// Any Function that starts with a M should be run inside the AppDomain // RunInDomain or CreateManagedThread
+// Example: DotNetHelper.MAllocateString
+// All other functions should(?) be run outside the AppDomain
+[64-bit]
+alloc(DotNetHelper,0x1000,$process)
+[/64-bit]
+[32-bit]
+alloc(DotNetHelper,0x1000)
+[/32-bit]
+registersymbol(DotNetHelper)
+
+label(DotNetHelper.RunInDomain)
+registersymbol(DotNetHelper.RunInDomain)
+
+label(DotNetHelper.CreateManagedThread)
+registersymbol(DotNetHelper.CreateManagedThread)
+
+label(DotNetHelper.MAllocateString)
+registersymbol(DotNetHelper.MAllocateString)
+
+label(DotNetHelper.MCreateString)
+registersymbol(DotNetHelper.MCreateString)
+
+label(DotNetHelper.IThreadStub)
+
+label(DotNetHelper.ICLRRuntimeHost)
+
+label(DotNetHelper.IGetRuntimeHost)
+registersymbol(DotNetHelper.IGetRuntimeHost)
+
+label(DotNetHelper.IMethodTable)
+
+DotNetHelper:
+
+DotNetHelper.RunInDomain: // stdcall int RunInDomain(void* funcToRun, void* userarg)
+// Runs 'funcToRun' in the Main AppDomain and passes 'userarg' in rcx(first argument) // [esp+4]
+// If the process is 32-bit then 'funcToRun' has to be a function that uses the stdcall-ing convention('userarg' is passed in [esp+4] and should use ret 4)
+[64-bit]
+test rcx,rcx
+jnz short @f
+  mov eax,-1
+  ret
+@@:
+sub rsp,38
+mov [rsp+20],rcx
+mov [rsp+28],rdx
+call DotNetHelper.IGetRuntimeHost
+test rax,rax
+jnz short @f
+  mov eax,-2
+  add rsp,38
+  ret
+@@:
+mov rcx,rax // ICLRRuntimeHost * This
+mov edx,1 // dwAppDomainId
+mov r8,[rsp+20] // FExecuteInAppDomainCallback pCallback
+mov r9,[rsp+28] // void *cookie
+mov rax,[rcx]
+call [rax+8*8] // ExecuteInAppDomain // +40
+add rsp,38
+ret
+[/64-bit]
+
+[32-bit]
+cmp [esp+4],0
+jne short @f
+  mov eax,-1
+  ret 8
+@@:
+call DotNetHelper.IGetRuntimeHost
+test eax,eax
+jnz short @f
+  mov eax,-2
+  ret 8
+@@:
+push [esp+8] // *cookie
+push [esp+8] // FExecuteInAppDomainCallback pCallback
+push 1 // dwAppDomainId
+push eax // ICLRRuntimeHost * This
+mov eax,[eax]
+call [eax+8*4] // ExecuteInAppDomain // +20
+ret 8
+[/32-bit]
+
+align 4 CC
+
+DotNetHelper.CreateManagedThread: // stdcall HANDLE CreateManagedThread(void* lpStartAddress, void* lpParameter)
+// Creates a Thread and makes it run in the Main Domain.
+// Thread has to return and should not call ExitThread without returning first!
+[64-bit]
+test rcx,rcx
+jnz short @f
+  xor eax,eax
+  ret
+@@:
+sub rsp,38
+mov [rsp+20],rcx
+mov [rsp+28],rdx
+mov rcx,gs:[60]
+mov rcx,[rcx+30]
+xor edx,edx
+mov r8d,10
+call ntdll.RtlAllocateHeap
+test rax,rax
+jnz short @f
+  add rsp,38
+  ret
+@@:
+movups xmm0,[rsp+20]
+movups [rax],xmm0
+xor rcx,rcx
+xor edx,edx
+lea r8,[DotNetHelper.IThreadStub]
+mov r9,rax
+xorps xmm0,xmm0
+movups [rsp+20],xmm0
+call KernelBase.CreateThread
+add rsp,38
+ret
+[/64-bit]
+
+[32-bit]
+cmp [esp+4],0
+jne short @f
+  xor eax,eax
+  ret 8
+@@:
+push 8
+push 0
+mov eax,fs:[30]
+push [eax+18]
+call ntdll.RtlAllocateHeap
+test eax,eax
+jnz short @f
+  ret 8
+@@:
+movq xmm0,[esp+4]
+movq [eax],xmm0
+push 0
+push 0
+push eax
+push DotNetHelper.IThreadStub
+push 0
+push 0
+call KernelBase.CreateThread
+ret 8
+[/32-bit]
+
+align 4 CC
+
+DotNetHelper.MAllocateString: // stdcall System.String MAllocateString(int length)
+[64-bit]
+mov rax,[DotNetHelper.IMethodTable]
+test rax,rax
+jz short @f
+jmp rax
+@@:
+ret
+[/64-bit]
+[32-bit]
+push ebp
+mov ebp,esp
+mov eax,[DotNetHelper.IMethodTable]
+test eax,eax
+jz short @f
+mov ecx,[ebp+8]
+push [ebp+8]
+call eax
+@@:
+mov esp,ebp
+pop ebp
+ret
+[/32-bit]
+
+align 4 CC
+
+DotNetHelper.MCreateString: // stdcall System.String MCreateString(const char* str)
+[64-bit]
+sub rsp,28
+test rcx,rcx
+jz @f
+mov [rsp+20],rcx
+call ntdll.strlen
+mov edx,eax
+mov rcx,[rsp+20]
+mov rax,[DotNetHelper.IMethodTable+8]
+test rax,rax
+jz short @f
+call rax
+@@:
+add rsp,28
+ret
+[/64-bit]
+
+[32-bit]
+push ebp
+mov ebp,esp
+cmp dword ptr [ebp+8],0
+je @f
+push [ebp+8]
+call ntdll.strlen
+mov edx,eax
+mov ecx,[ebp+8]
+push eax
+push [ebp+8]
+mov eax,[DotNetHelper.IMethodTable+8]
+test eax,eax
+jz short @f
+call eax
+@@:
+mov esp,ebp
+pop ebp
+ret 4
+[/32-bit]
+
+align 4 CC
+
+DotNetHelper.IThreadStub:
+[64-bit]
+sub rsp,38
+movups xmm0,[rcx]
+movups [rsp+20],xmm0
+mov r8,rcx
+mov rcx,gs:[60]
+mov rcx,[rcx+30]
+xor edx,edx
+call ntdll.RtlFreeHeap
+mov rcx,[rsp+20]
+mov rdx,[rsp+28]
+call DotNetHelper.RunInDomain
+add rsp,38
+ret
+[/64-bit]
+
+[32-bit]
+mov eax,[esp+4]
+push [eax+4]
+push [eax]
+push eax
+push 0
+mov eax,fs:[30]
+push [eax+18]
+call ntdll.RtlFreeHeap
+call DotNetHelper.RunInDomain
+ret 4
+[/32-bit]
+
+align 4 CC
+
+[64-bit]
+DotNetHelper.ICLRRuntimeHost:
+dq 0
+[/64-bit]
+[32-bit]
+DotNetHelper.ICLRRuntimeHost:
+dd 0
+[/32-bit]
+
+DotNetHelper.IMethodTable:
+dq %x
+dq %x
+
+%s
+]==]
+
+    local DotNetCoreHelperStub = [==[
+label(IID_ICLRRuntimeHost4)
+
+IID_ICLRRuntimeHost4:
+db 66 d3 f6 64 c2 d7 1f 4f b4 b2 e8 16 0c ac 43 af
+
+[64-bit]
+DotNetHelper.IGetRuntimeHost:
+mov rax,[DotNetHelper.ICLRRuntimeHost]
+test rax,rax
+jz short @f
+  ret
+@@:
+sub rsp,28
+mov rcx,IID_ICLRRuntimeHost4
+mov rdx,DotNetHelper.ICLRRuntimeHost
+call GetCLRRuntimeHost
+add rsp,28
+test eax,eax
+jnz short @f
+  mov rax,[DotNetHelper.ICLRRuntimeHost]
+  ret
+@@:
+xor eax,eax
+ret
+[/64-bit]
+
+[32-bit]
+DotNetHelper.IGetRuntimeHost:
+mov eax,[DotNetHelper.ICLRRuntimeHost]
+test eax,eax
+jz short @f
+  ret
+@@:
+push ebp
+mov ebp,esp
+push DotNetHelper.ICLRRuntimeHost
+push IID_ICLRRuntimeHost4
+call GetCLRRuntimeHost
+mov esp,ebp
+pop ebp
+test eax,eax
+jnz short @f
+  mov eax,[DotNetHelper.ICLRRuntimeHost]
+  ret
+@@:
+xor eax,eax
+ret
+[/32-bit]
+]==]
+
+    local DotNetFrameworkHelperStub = [==[
+label(RuntimeEnumLoop)
+
+label(IID_ICLRMetaHost)
+IID_ICLRMetaHost:
+db 9E DB 32 D3 B3 B9 25 41 82 07 A1 48 84 F5 32 16
+
+label(CLSID_CLRMetaHost)
+CLSID_CLRMetaHost:
+db 8D 18 80 92 8E 0E 67 48 B3 0C 7F A8 38 84 E8 DE
+
+label(IID_ICLRRuntimeHost)
+IID_ICLRRuntimeHost:
+db 22 67 2F CB 3A AB D2 11 9C 40 00 C0 4F A3 0A 3E
+
+label(CLSID_CLRRuntimeHost)
+CLSID_CLRRuntimeHost:
+db 23 67 2F CB 3A AB D2 11 9C 40 00 C0 4F A3 0A 3E
+
+[64-bit]
+DotNetHelper.IGetRuntimeHost:
+mov rax,[DotNetHelper.ICLRRuntimeHost]
+test rax,rax
+jz short @f
+  ret
+@@:
+sub rsp,68
+lea rcx,[CLSID_CLRMetaHost]
+lea rdx,[IID_ICLRMetaHost]
+lea r8,[rsp+30] // metahost
+call MSCOREE.CLRCreateInstance
+test eax,eax
+jz short @f
+  xor eax,eax
+  add rsp,68
+  ret
+@@:
+mov rcx,[rsp+30] // metahost
+mov rax,[rcx]
+mov rdx,-1
+lea r8,[rsp+38] // RuntimeEnum
+call [rax+6*8] // EnumerateLoadedRuntimes
+test eax,eax
+jz short @f
+  xor eax,eax
+  add rsp,68
+  ret
+RuntimeEnumLoop:
+mov rcx,[rsp+38] // RuntimeEnum
+mov rax,[rcx]
+mov edx,1
+lea r8,[rsp+40] // RuntimeInfo
+lea r9,[rsp+48] // Count
+call [rax+3*8] // RuntimeEnum->Next
+test eax,eax
+jz short @f
+  xor eax,eax
+  add rsp,68
+  ret
+@@:
+mov rcx,[rsp+40] // RuntimeInfo
+mov rax,[rcx]
+lea rdx,[rsp+50] // rti_started
+lea r8,[rsp+58] // rti_flags
+call [rax+e*8] // RuntimeInfo->isStarted(started,flags)
+test eax,eax
+jnz RuntimeEnumLoop
+cmp dword ptr [rsp+58],0
+je RuntimeEnumLoop
+// started
+mov rcx,[rsp+40] // RuntimeInfo
+mov rax,[rcx]
+lea rdx,[CLSID_CLRRuntimeHost]
+lea r8,[IID_ICLRRuntimeHost]
+lea r9,[DotNetHelper.ICLRRuntimeHost]
+call [rax+9*8] // GetInterface
+test eax,eax
+jnz RuntimeEnumLoop
+mov rax,[DotNetHelper.ICLRRuntimeHost]
+ret
+
+[/64-bit]
+[32-bit]
+DotNetHelper.IGetRuntimeHost:
+mov eax,[DotNetHelper.ICLRRuntimeHost]
+test eax,eax
+jz short @f
+  ret
+@@:
+push ebp
+mov ebp,esp
+sub esp,18
+lea eax,[ebp-4] // metahost
+push eax
+push IID_ICLRMetaHost
+push CLSID_CLRMetaHost
+call MSCOREE.CLRCreateInstance
+test eax,eax
+jz short @f
+  xor eax,eax
+  mov esp,ebp
+  pop ebp
+  ret
+@@:
+mov ecx,[ebp-4] // metahost
+mov eax,[ecx]
+lea edx,[ebp-8] // RuntimeEnum
+push edx
+push -1
+push ecx
+call [eax+6*4] // EnumerateLoadedRuntimes
+test eax,eax
+jz short @f
+  xor eax,eax
+  mov esp,ebp
+  pop ebp
+  ret
+RuntimeEnumLoop:
+mov ecx,[ebp-8] // RuntimeEnum
+mov eax,[ecx]
+lea edx,[ebp-C] // Count
+push edx
+lea edx,[ebp-10] // RuntimeInfo
+push edx
+push 1
+push ecx
+call [eax+3*4] // RuntimeEnum->Next
+test eax,eax
+jz short @f
+  xor eax,eax
+  mov esp,ebp
+  pop ebp
+  ret
+@@:
+mov ecx,[ebp-10] // RuntimeInfo
+mov eax,[ecx]
+lea edx,[ebp-14] // rti_flags
+push edx
+lea edx,[ebp-18] // rti_started
+push edx
+push ecx
+call [eax+e*4] // RuntimeInfo->isStarted(started,flags)
+test eax,eax
+jne RuntimeEnumLoop
+cmp dword ptr [ebp-14],0 // rti_flags
+je RuntimeEnumLoop
+// started
+mov ecx,[ebp-10] // RuntimeInfo
+mov eax,[ecx]
+push DotNetHelper.ICLRRuntimeHost
+push IID_ICLRRuntimeHost
+push CLSID_CLRRuntimeHost
+push ecx
+call [eax+9*4] // GetInterface
+test eax,eax
+jne RuntimeEnumLoop
+mov eax,[DotNetHelper.ICLRRuntimeHost]
+mov esp,ebp
+pop ebp
+ret
+[/32-bit]
+]==]
+
+    local DotNetHelperScript
+
+    local scriptStub
+
+    if (getAddressSafe('CORECLR.GetCLRRuntimeHost')) then
+        scriptStub = DotNetCoreHelperStub
+    elseif (getAddressSafe('MSCOREE.CLRCreateInstance')) then
+        scriptStub = DotNetFrameworkHelperStub
+    else
+        return false,'Invalid Dotnet Architecture'
+    end
+
+    local baseModule = DotNetDataCollectorEx.GetBaseClassModule()
+    if (baseModule) then baseModule = baseModule.hModule end
+    
+    local m2 = DotNetDataCollectorEx.FindMethodByDescAndCompile(baseModule, 'System.String.CreateStringForSByteConstructor(Byte*, Int32)') or 0
+    local m1 = DotNetDataCollectorEx.FindMethodByDescAndCompile(baseModule, 'System.String.FastAllocateString(Int32)') or 0
+
+    DotNetHelperScript = DotNetHelperScriptTemp:format(m1, m2, scriptStub)
+
+    local status, disableInfo = autoAssemble(DotNetHelperScript)
+
+    if (not status) then return false,'Failed to assemble DotNetHelper Script!' end
+    dotnetHelperScriptProcId = getOpenedProcessID() -- Set Process ID
+    return true
+end
+
+-- End of Extensions
+
 local function LaunchDotNetDataCollectorEx()
     local pipeInfo = dotnetex_I_getRunningDotNetInfo()
     if (not pipeInfo) then
@@ -1792,6 +2664,12 @@ local function LaunchDotNetDataCollectorEx()
     --end
     if (dotnetex_initPipe(pipeConnectionTimeOut, pipeInfo)) then
         DotNetDataCollectorEx.pipe = dotnetpipeex
+        symbolCache = {} -- Clear and create new symbol cache
+        symbolCacheNames = {}
+        -- Register Symbol Lookup here and not in RegisterCallbacks because some symbols are created by other exported lua functions
+        if (dotnetpipeex.SymbolLookupID == nil) then
+            dotnetpipeex.SymbolLookupID = registerSymbolLookupCallback(dotnetex_SymbolLookupCallback, slNotSymbol)
+        end
         return true
     end
     print("Failed to Launch DotNetDataCollectorEx")
@@ -1801,8 +2679,6 @@ end
 function getDotNetDataCollectorEx()
     if (dotnetpipeex == nil or tonumber(dotnetpipeex.processid) ~= getOpenedProcessID()) then
         --print("Launching DotNetDataCollectorEx")
-
-        symbolCache = {} -- Clear and create new symbol cache
         if (not LaunchDotNetDataCollectorEx()) then
             print("Failed to launch DotNetDataCollectorEx")
             return nil

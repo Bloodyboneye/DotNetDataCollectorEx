@@ -7,8 +7,8 @@ namespace DotNetDataCollectorEx
 {
     public static class MethodSignatureParser
     {
-        private static readonly SearchValues<char> s_invalidCharsNSC = SearchValues.Create("@#$%^&*()-+=/\\,;:[]{}|<>?");
-        private static readonly SearchValues<char> s_invalidCharsMethod = SearchValues.Create("@#$%^&*()-+=/\\,;:[]{}|<>?.");
+        private static readonly SearchValues<char> s_invalidCharsNSC = SearchValues.Create("@#$%^&*()-=/\\,;:[]{}|?");
+        private static readonly SearchValues<char> s_invalidCharsMethod = SearchValues.Create("@#$%^&*()-+=/\\,;:[]{}|?");
 
         public enum CPlusTypeFlag
         {
@@ -178,26 +178,37 @@ namespace DotNetDataCollectorEx
                 return false;
 
             bool expectStart = true;
+            bool insideCompilerGenerated = false;
+
             foreach (char c in input)
             {
-                if (c == '.')
+                if (c == '.' || c == '+') // Allow nested types (e.g., "Namespace.Class+NestedClass")
                 {
                     expectStart = true;
-                    continue;
+                    insideCompilerGenerated = false; // Reset if a new part starts
                 }
-
-                if (expectStart)
+                else if (expectStart)
                 {
-                    if (!char.IsLetter(c) && c != '_') return false;
+                    if (!char.IsLetter(c) && c != '_' && c != '<') 
+                        return false;
                     expectStart = false;
+
+                    if (c == '<')
+                        insideCompilerGenerated = true;
                 }
                 else
                 {
-                    if (!char.IsLetterOrDigit(c) && c != '_') return false;
+                    if (!char.IsLetterOrDigit(c) && c != '_')
+                    {
+                        if (c == '>' && insideCompilerGenerated)
+                            insideCompilerGenerated = false;
+                        else 
+                            return false;
+                    }
                 }
             }
 
-            return !expectStart;
+            return !expectStart && !insideCompilerGenerated; // Ensure it doesn't end with '.' or '+'
         }
 
         public static bool IsValidMethodName(ReadOnlySpan<char> input)
@@ -208,14 +219,16 @@ namespace DotNetDataCollectorEx
             if (input.IndexOfAny(s_invalidCharsMethod) >= 0)
                 return false;
 
-            // Method names can start with a letter or underscore
-            if (!char.IsLetter(input[0]) && input[0] != '_')
+            // Method names can start with a letter, underscore, '.'(constructor) or '<' (compiler-generated)
+            char first = input[0];
+            if (!char.IsLetter(first) && first != '_' && first != '.' && first != '<')
                 return false;
 
-            // Remaining characters can be letters, digits, or underscores
+            // Remaining characters can be letters, digits, or underscores or `<>` for compiler-generated names
             for (int i = 1; i < input.Length; i++)
             {
-                if (!char.IsLetterOrDigit(input[i]) && input[i] != '_')
+                char c = input[i];
+                if (!char.IsLetterOrDigit(c) && c != '_' && c != '<' && c != '>')
                     return false;
             }
 
